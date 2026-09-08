@@ -235,9 +235,10 @@ var FACTION_BADGE={wolf:'badge-wolf',good_god:'badge-good',good_villager:'badge-
 function nightGroupOrder(rc){
   var front = rc.guardBeforeWolf!==false ? ['guard','wolf'] : ['wolf','guard'];
   var back = rc.witchBeforeSeer!==false ? ['witch','seer'] : ['seer','witch'];
-  return front.concat(back);
+  // 獵人放在最後：需要知道整晚（狼刀/守衛/女巫）的結果，才能告知能不能開槍
+  return front.concat(back).concat(['hunter']);
 }
-var NIGHT_GROUP_LABEL={guard:'守衛',wolf:'狼人',witch:'女巫',seer:'預言家'};
+var NIGHT_GROUP_LABEL={guard:'守衛',wolf:'狼人',witch:'女巫',seer:'預言家',hunter:'獵人'};
 
 /* ============ localStorage ============ */
 var LS={
@@ -667,7 +668,8 @@ function renderPlayerFlow(){
 function renderPublicBoard(){
   var cells = seatNums().map(function(n){
     var s=seatData(n); var isMe = ui.seat===n;
-    var cls='seat'+(!s.occupied?' empty':'')+(!s.alive?' dead':'')+(isMe?' me':'')+(state.game.sheriffSeat===n?' sheriff':'');
+    var showDead = !s.alive && s.revealed!==false; // 死訊還沒正式公布前，公開畫面先當作還活著
+    var cls='seat'+(!s.occupied?' empty':'')+(showDead?' dead':'')+(isMe?' me':'')+(state.game.sheriffSeat===n?' sheriff':'');
     var claimable = !s.occupied && ui.seat==null;
     return '<div class="'+cls+'" '+(claimable?'data-act="claim-seat" data-n="'+n+'"':'')+'>'
       + '<div class="num mono">'+n+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div></div>';
@@ -682,6 +684,12 @@ function renderPublicBoard(){
 function renderDayPublicPanels(){
   var html='';
   var ds = state.game.dayStage;
+  if(ds==='sheriff_call'){
+    html += '<div class="card"><p class="muted small">上帝正在詢問是否有人要上警，請留意上帝口頭指示與舉手時機。</p></div>';
+  }
+  if(ds==='reveal'){
+    html += '<div class="card"><p class="muted small">上帝正在公布昨晚戰報，請留意上帝口頭宣布。</p></div>';
+  }
   if(ds==='sheriff_speech' || ds==='sheriff_vote'){
     html += renderSpeakingOrderCard(state.game.speakingOrder);
   }
@@ -719,6 +727,15 @@ function renderGodConsole(){
   html += renderGodBottomTools();
   return html;
 }
+function roleOptionsFor(currentRole){
+  var assignedByRole={}; seatNums().forEach(function(n){ var r=roleOfSeat(n); if(r) assignedByRole[r]=(assignedByRole[r]||0)+1; });
+  return ROLE_LIST.filter(function(r){
+    var need=roleConfigCounts()[r]||0;
+    if(need<=0) return false;
+    if(r===currentRole) return true; // 保留目前這個座位本來的選項，才能改選成別的
+    return (assignedByRole[r]||0) < need;
+  });
+}
 function renderGodBottomTools(){
   var assignedByRole={}; seatNums().forEach(function(n){ var r=roleOfSeat(n); if(r) assignedByRole[r]=(assignedByRole[r]||0)+1; });
   var remaining = ROLE_LIST.filter(function(r){ return (roleConfigCounts()[r]||0) > (assignedByRole[r]||0); });
@@ -733,7 +750,7 @@ function renderGodBottomTools(){
       + '<span class="muted" style="flex:1;min-width:70px;">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+(!s.alive?' · 已死亡':'')+'</span>'
       + '<select data-act="assign-role" data-n="'+n+'" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-sunken);color:var(--text);">'
       + '<option value="">未標記</option>'
-      + ROLE_LIST.filter(function(r){return (roleConfigCounts()[r]||0)>0;}).map(function(r){return '<option value="'+r+'"'+(role===r?' selected':'')+'>'+ROLES[r].name+'</option>';}).join('')
+      + roleOptionsFor(role).map(function(r){return '<option value="'+r+'"'+(role===r?' selected':'')+'>'+ROLES[r].name+'</option>';}).join('')
       + '</select>'
       + '<button class="btn btn-sm" data-act="toggle-alive" data-n="'+n+'">'+(s.alive?'標記死亡':'復活')+'</button>'
       + '<button class="btn btn-sm btn-ghost" data-act="clear-seat" data-n="'+n+'">清空</button>'
@@ -774,6 +791,7 @@ function groupHasAliveRole(group){
   if(group==='guard') return roleMaybeAlive('guard');
   if(group==='witch') return roleMaybeAlive('witch');
   if(group==='seer') return roleMaybeAlive('seer');
+  if(group==='hunter') return roleMaybeAlive('hunter');
   if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(roleMaybeAlive);
   return false;
 }
@@ -781,6 +799,7 @@ function groupExistsInConfig(group){
   if(group==='guard') return (roleConfigCounts().guard||0)>0;
   if(group==='witch') return (roleConfigCounts().witch||0)>0;
   if(group==='seer') return (roleConfigCounts().seer||0)>0;
+  if(group==='hunter') return (roleConfigCounts().hunter||0)>0;
   if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(function(r){return (roleConfigCounts()[r]||0)>0;});
   return false;
 }
@@ -860,31 +879,81 @@ function renderNightGroupAction(group){
     var ab=roleAbilities(wseat);
     var nl=currentNightlog();
     var deathSeat = nl.wolfTarget || 0;
+    if(ab.antidoteUsed && ab.poisonUsed){
+      return '<div class="gesture"><div class="big">女巫的藥都用完了</div><p class="small">請照喊「女巫請睜眼」，但用手勢告知她今晚不能使用技能，不要開口說明原因。</p>'
+        + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+    }
+    var html='<div class="card stack"><h2>請女巫睜眼</h2>'
+      + '<p class="muted small">今晚死訊：'+(deathSeat?deathSeat+' 號被攻擊':'無人被攻擊')+'。</p>';
     // 自救規則：目標是女巫本人時，只有「首夜可自救」開啟且為第一夜才允許
     var selfSaveOk = deathSeat!==wseat || (rc().witchSelfSaveFirstNight && state.game.nightNumber===1);
-    var canAntidote = !ab.antidoteUsed && deathSeat>0 && selfSaveOk;
-    var canPoison = !ab.poisonUsed && (rc().witchBothPotionsSameNight || !nl.antidoteTarget);
-    var html='<div class="card stack"><h2>請女巫睜眼</h2>'
-      + '<p class="muted small">今晚死訊：'+(deathSeat?deathSeat+' 號被攻擊':'無人被攻擊')+'。解藥'+(ab.antidoteUsed?'已用完':'剩 1 瓶')+'／毒藥'+(ab.poisonUsed?'已用完':'剩 1 瓶')+'。</p>';
-    if(deathSeat){
-      html += '<div class="row wrap">'
-        + (canAntidote?'<button class="btn btn-good" data-act="night-witch-save" data-n="'+deathSeat+'" data-confirm="確定使用解藥救 '+deathSeat+' 號嗎？（解藥只有一瓶，用掉就沒有了）">使用解藥救 '+deathSeat+' 號</button>':'')
-        + '<button class="btn btn-ghost" data-act="night-witch-nosave">不使用解藥</button></div>';
+    var antidoteStageDone = ab.antidoteUsed || !!nl.antidoteDeclined || !!nl.antidoteTarget;
+    if(!antidoteStageDone){
+      html += '<div class="eyebrow">階段一・解藥</div>';
+      if(deathSeat===0){
+        html += '<p class="small muted">今晚沒有人受到攻擊，沒有目標可以救。</p><button class="btn btn-primary btn-block" data-act="night-witch-nosave">知道了，繼續</button>';
+      } else if(!selfSaveOk){
+        html += '<p class="small muted">被攻擊的是女巫自己，依規則本局不可自救。</p><button class="btn btn-primary btn-block" data-act="night-witch-nosave">知道了，繼續</button>';
+      } else {
+        html += '<div class="row wrap">'
+          + '<button class="btn btn-good" data-act="night-witch-save" data-n="'+deathSeat+'" data-confirm="確定使用解藥救 '+deathSeat+' 號嗎？（解藥只有一瓶，用掉就沒有了）">使用解藥救 '+deathSeat+' 號</button>'
+          + '<button class="btn btn-ghost" data-act="night-witch-nosave">不使用解藥</button></div>';
+      }
+      html += '</div>';
+      return html;
     }
-    if(canPoison){
-      html += '<div class="field" style="margin-top:8px;"><label>使用毒藥（可略過）</label><div class="btngrid">'
+    var poisonBlockedBySameNight = !!nl.antidoteTarget && !rc().witchBothPotionsSameNight;
+    var poisonStageDone = ab.poisonUsed || !!nl.poisonDeclined || !!nl.poisonTarget || poisonBlockedBySameNight;
+    if(!poisonStageDone){
+      html += '<div class="eyebrow">階段二・毒藥</div>';
+      html += '<div class="field"><label>使用毒藥（可略過）</label><div class="btngrid">'
         + alive.filter(function(n){return n!==wseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-witch-poison" data-n="'+n+'" data-confirm="確定對 '+n+' 號使用毒藥嗎？（毒藥只有一瓶，用掉就沒有了）">'+n+'</button>';}).join('')
-        + '</div></div>';
+        + '</div></div>'
+        + '<button class="btn btn-ghost btn-block" data-act="night-witch-nopoison" style="margin-top:8px;">不使用毒藥</button></div>';
+      return html;
     }
-    html += '<button class="btn btn-primary btn-block" data-act="night-witch-done" style="margin-top:10px;">女巫行動結束</button></div>';
+    var closeMsg = poisonBlockedBySameNight ? '今晚已使用解藥，依規則不能同時使用毒藥。' : (ab.poisonUsed ? '毒藥已用完。' : '毒藥留到之後再用。');
+    html += '<p class="small muted">'+closeMsg+'</p>'
+      + '<button class="btn btn-primary btn-block" data-act="night-witch-done" style="margin-top:10px;">女巫行動結束</button></div>';
     return html;
   }
   if(group==='seer'){
     var pick=pickIdentifyUI('seer','預言家');
     if(pick) return pick;
     var sseat=findAliveSeatWithRole('seer');
+    var nl=currentNightlog();
+    if(nl.seerTarget){
+      return '<div class="gesture"><div class="big">'+nl.seerTarget+' 號是「'+nl.seerResult+'」</div><p class="small">請用手勢告知預言家查驗結果（例如：好人比 OK、狼人比叉），不要開口說明，比完手勢再繼續。</p>'
+        + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+    }
+    if(nl.seerPendingTarget){
+      var target=nl.seerPendingTarget;
+      var options=remainingRoleOptions();
+      return '<div class="card stack"><h2>'+target+' 號的身份還沒登記過</h2><p class="muted small">預言家要查驗這一位，請先確認他實際的身份，系統才能正確告知查驗結果。</p>'
+        + '<div class="stack">'+options.map(function(r){return '<button class="btn btn-sm" data-act="assign-seer-target-role" data-n="'+target+'" data-r="'+r+'" data-confirm="確定 '+target+' 號的身份是「'+ROLES[r].name+'」嗎？">'+ROLES[r].name+'</button>';}).join('')+'</div></div>';
+    }
     return '<div class="card stack"><h2>請預言家睜眼</h2><p class="muted small">預言家（'+sseat+'號）選擇一位查驗。</p>'
       + '<div class="btngrid">' + alive.filter(function(n){return n!==sseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-seer" data-n="'+n+'" data-confirm="確定查驗 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div></div>';
+  }
+  if(group==='hunter'){
+    var pick=pickIdentifyUI('hunter','獵人');
+    if(pick) return pick;
+    var hseat=findAliveSeatWithRole('hunter');
+    var deaths=computeNightDeaths();
+    var dying=deaths.find(function(d){return d.seat===hseat;});
+    var big, note;
+    if(!dying){
+      big='獵人平安無事';
+      note='請比出「沒事」的手勢（例如搖頭），讓獵人安心閉眼，不用開口說明。';
+    } else if(dying.cause==='poison' && !rc().hunterCanShootIfPoisoned){
+      big='獵人今晚會死亡，且是中毒身亡';
+      note='請比出「不能開槍」的手勢（例如比叉），不要開口說明原因。';
+    } else {
+      big='獵人今晚會死亡，但仍可以開槍';
+      note='請比出「可以開槍」的手勢（例如比手槍動作），不要開口說明原因；實際要開槍打誰，等明天公布死訊時再詢問。';
+    }
+    return '<div class="gesture"><div class="big">'+big+'</div><p class="small">'+note+'</p>'
+      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
   }
   return '';
 }
@@ -920,24 +989,41 @@ async function actWitchSave(n){
   await db.collection('nightlog').doc(currentNightlogKey()).update({antidoteTarget:n});
   await updateRole(wseat,{abilities:Object.assign({},roleAbilities(wseat),{antidoteUsed:true})});
 }
+async function actWitchDeclineAntidote(){
+  await ensureNightlog();
+  await db.collection('nightlog').doc(currentNightlogKey()).update({antidoteDeclined:true});
+}
 async function actWitchPoison(n){
   var wseat=findAliveSeatWithRole('witch');
   await db.collection('nightlog').doc(currentNightlogKey()).update({poisonTarget:n});
   await updateRole(wseat,{abilities:Object.assign({},roleAbilities(wseat),{poisonUsed:true})});
 }
+async function actWitchDeclinePoison(){
+  await db.collection('nightlog').doc(currentNightlogKey()).update({poisonDeclined:true});
+}
 async function actNightSeer(n){
+  var role=roleOfSeat(n);
+  if(!role){
+    await db.collection('nightlog').doc(currentNightlogKey()).update({seerPendingTarget:n});
+    return;
+  }
+  await finalizeSeerCheck(n, role);
+}
+async function actAssignSeerTargetRole(n, roleId){
+  await updateRole(n,{role:roleId});
+  await finalizeSeerCheck(n, roleId);
+}
+async function finalizeSeerCheck(n, role){
   var sseat=findAliveSeatWithRole('seer');
-  var targetRole=roleOfSeat(n);
-  var result = targetRole && ROLES[targetRole].faction==='wolf' ? '狼人' : '好人';
-  await db.collection('nightlog').doc(currentNightlogKey()).update({seerTarget:n,seerResult:result});
+  var result = ROLES[role].faction==='wolf' ? '狼人' : '好人';
+  await db.collection('nightlog').doc(currentNightlogKey()).update({seerTarget:n,seerResult:result,seerPendingTarget:null});
   var hist=(roleAbilities(sseat).checkedHistory)||[];
   hist=hist.concat([{n:n,result:result,night:state.game.nightNumber}]);
   await updateRole(sseat,{abilities:Object.assign({},roleAbilities(sseat),{checkedHistory:hist})});
-  await nightAdvance();
 }
 
 /* ---- 死亡結算引擎（夜晚 & 白天共用）---- */
-async function resolveNight(){
+function computeNightDeaths(){
   var nl=currentNightlog();
   var deaths=[];
   var wolfTarget=nl.wolfTarget||0;
@@ -950,10 +1036,16 @@ async function resolveNight(){
   }
   if(nl.poisonTarget){ deaths.push({seat:nl.poisonTarget,cause:'poison'}); }
   var seen={}; deaths=deaths.filter(function(d){ if(seen[d.seat])return false; seen[d.seat]=true; return true; });
-  await startResolution(deaths,'night');
+  return deaths;
 }
-async function startResolution(deaths,context){
-  await updateGame({ pending:{ queue:deaths, awaiting:null, context:context, resolvedText:[] } });
+async function resolveNight(){
+  var deaths=computeNightDeaths();
+  // 第一天不要馬上公布死訊，要先問完上警才正式公布（跟現實流程一致）
+  var suppressReveal = (state.game.dayNumber||0)===0;
+  await startResolution(deaths,'night',suppressReveal);
+}
+async function startResolution(deaths,context,suppressReveal){
+  await updateGame({ pending:{ queue:deaths, awaiting:null, context:context, resolvedText:[], suppressReveal: !!suppressReveal } });
   await processPendingQueue();
 }
 async function processPendingQueue(){
@@ -964,13 +1056,24 @@ async function processPendingQueue(){
   if(!queue.length){
     // 結算完成
     var texts = pending.resolvedText||[];
-    for (var i=0;i<texts.length;i++) await appendLog(texts[i]);
     var context = pending.context;
+    var suppress = pending.suppressReveal;
     await updateGame({pending:null});
     var winner=checkWin();
+    if(suppress && !winner){
+      // 第一天：先不公布死訊，進上警登記（或沒開上警就直接進公布階段）
+      await updateGame({
+        phase:'day', dayNumber:(state.game.dayNumber||0)+1,
+        dayStage: rc().sheriffEnabled ? 'sheriff_call' : 'reveal',
+        afterReveal: 'speech_setup',
+        pendingRevealTexts: texts
+      });
+      return;
+    }
+    for (var i=0;i<texts.length;i++) await appendLog(texts[i]);
     if(winner){ await updateGame({winner:winner}); return; }
     if(context==='night'){
-      await updateGame({phase:'day', dayNumber:(state.game.dayNumber||0)+1, dayStage: (state.game.dayNumber||0)===0 && rc().sheriffEnabled ? 'sheriff_call' : 'speech_setup'});
+      await updateGame({phase:'day', dayNumber:(state.game.dayNumber||0)+1, dayStage:'speech_setup'});
     } else if(context==='detonate' || context==='day-after-vote'){
       await updateGame({phase:'night', nightNumber:(state.game.nightNumber||0)+1, nightStepIndex:0, dayStage:null});
     }
@@ -998,7 +1101,7 @@ async function processPendingQueue(){
     await updateGame({pending:Object.assign({},pending,{queue:queue,resolvedText:texts})});
     return processPendingQueue();
   }
-  await updateSeat(seatN,{alive:false,deathCause:cause});
+  await updateSeat(seatN,{alive:false,deathCause:cause,revealed:!pending.suppressReveal});
   texts=texts.concat([seatN+' 號玩家死亡。']);
   // 狼美人殉情
   var beautySeat = findSeatsWithRole('wolfbeauty')[0];
@@ -1104,9 +1207,30 @@ function renderDayEngine(){
     html += renderVoteRunner('lynch');
   } else if(ds==='badge_transfer'){
     html += renderBadgeTransfer();
+  } else if(ds==='reveal'){
+    html += renderRevealStage();
   }
   html += renderDaySpecialActions();
   return html;
+}
+function renderRevealStage(){
+  var texts = state.game.pendingRevealTexts||[];
+  return '<div class="card stack"><h2>🌅 天亮了，公布結果</h2>'
+    + (texts.length ? '<div class="log">'+texts.map(function(t){return '<div class="log-item">'+esc(t)+'</div>';}).join('')+'</div>' : '<p class="muted small">昨晚是平安夜，沒有人死亡。</p>')
+    + '<p class="small muted" style="margin-top:8px;">請上帝現在向全場公布以上結果。</p>'
+    + '<button class="btn btn-primary btn-block" data-act="reveal-deaths" style="margin-top:10px;">公布完成，繼續</button></div>';
+}
+async function actRevealDeaths(){
+  var texts = state.game.pendingRevealTexts||[];
+  for(var i=0;i<texts.length;i++){ await appendLog(texts[i]); }
+  var jobs=[];
+  seatNums().forEach(function(n){
+    var s=seatData(n);
+    if(s.alive===false && s.revealed===false){ jobs.push(updateSeat(n,{revealed:true})); }
+  });
+  await Promise.all(jobs);
+  var next = state.game.afterReveal || 'speech_setup';
+  await updateGame({pendingRevealTexts:[], dayStage:next, afterReveal:null});
 }
 function renderDaySpecialActions(){
   if(state.game.pending || state.game.dayStage==='badge_transfer') return '';
@@ -1158,9 +1282,13 @@ function renderSheriffCall(){
 }
 async function actConfirmCandidates(){
   var cands=state.game.candidates||[];
-  if(cands.length<2){ var order=genOrder(cands, 'asc', cands[0]); await updateGame({speakingOrder:order, dayStage:'sheriff_vote'}); return; }
+  if(cands.length<2){
+    var order=genOrder(cands, 'asc', cands[0]);
+    await updateGame({speakingOrder:order, dayStage:'reveal', afterReveal:'sheriff_vote'});
+    return;
+  }
   var order = genOrder(cands, Math.random()<0.5?'asc':'desc', cands[Math.floor(Math.random()*cands.length)]);
-  await updateGame({speakingOrder:order, dayStage:'sheriff_speech'});
+  await updateGame({speakingOrder:order, dayStage:'reveal', afterReveal:'sheriff_speech'});
 }
 function genOrder(list, dir, start){
   var arr=list.slice().sort(function(a,b){return a-b;});
@@ -1495,7 +1623,6 @@ function handleAction(act, el){
   if(act==='night-wolf'){ actNightWolf(Number(el.getAttribute('data-n'))); return; }
   if(act==='night-charm'){ actNightCharm(Number(el.getAttribute('data-n'))); return; }
   if(act==='night-witch-save'){ actWitchSave(Number(el.getAttribute('data-n'))); return; }
-  if(act==='night-witch-nosave'){ render(); return; }
   if(act==='night-witch-poison'){ actWitchPoison(Number(el.getAttribute('data-n'))); return; }
   if(act==='night-witch-done'){ nightAdvance(); return; }
   if(act==='night-seer'){ actNightSeer(Number(el.getAttribute('data-n'))); return; }
@@ -1512,7 +1639,11 @@ function handleAction(act, el){
     updateGame({candidates:cands}); return;
   }
   if(act==='confirm-candidates'){ actConfirmCandidates(); return; }
-  if(act==='skip-sheriff'){ updateGame({dayStage:'speech_setup', sheriffSeat:null}); return; }
+  if(act==='skip-sheriff'){ updateGame({dayStage:'reveal', afterReveal:'speech_setup', sheriffSeat:null}); return; }
+  if(act==='reveal-deaths'){ actRevealDeaths(); return; }
+  if(act==='assign-seer-target-role'){ actAssignSeerTargetRole(Number(el.getAttribute('data-n')), el.getAttribute('data-r')); return; }
+  if(act==='night-witch-nosave'){ actWitchDeclineAntidote(); return; }
+  if(act==='night-witch-nopoison'){ actWitchDeclinePoison(); return; }
   if(act==='goto-sheriff-vote'){ updateGame({dayStage:'sheriff_vote'}); return; }
   if(act==='goto-lynch-vote'){ updateGame({dayStage:'lynch_vote'}); return; }
   if(act==='gen-speech'){ actGenSpeech(el.getAttribute('data-dir')); return; }
