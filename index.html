@@ -873,24 +873,25 @@ function renderNightGroupAction(group){
     return html;
   }
   if(group==='witch'){
+    // 不管解藥/毒藥還有沒有，每晚都要走「階段一→階段二」同樣的兩步節奏，
+    // 差別只在按鈕內容，藥用完了也要照樣點一次「知道了，繼續」──
+    // 這樣上帝每晚花在女巫身上的步驟數/停留時間都一樣，閉眼的其他玩家才不會從節奏猜出解藥還在不在。
     var pick=pickIdentifyUI('witch','女巫');
     if(pick) return pick;
     var wseat=findAliveSeatWithRole('witch');
     var ab=roleAbilities(wseat);
     var nl=currentNightlog();
     var deathSeat = nl.wolfTarget || 0;
-    if(ab.antidoteUsed && ab.poisonUsed){
-      return '<div class="gesture"><div class="big">女巫的藥都用完了</div><p class="small">請照喊「女巫請睜眼」，但用手勢告知她今晚不能使用技能，不要開口說明原因。</p>'
-        + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
-    }
+    var selfSaveOk = deathSeat!==wseat || (rc().witchSelfSaveFirstNight && state.game.nightNumber===1);
     var html='<div class="card stack"><h2>請女巫睜眼</h2>'
       + '<p class="muted small">今晚死訊：'+(deathSeat?deathSeat+' 號被攻擊':'無人被攻擊')+'。</p>';
-    // 自救規則：目標是女巫本人時，只有「首夜可自救」開啟且為第一夜才允許
-    var selfSaveOk = deathSeat!==wseat || (rc().witchSelfSaveFirstNight && state.game.nightNumber===1);
-    var antidoteStageDone = ab.antidoteUsed || !!nl.antidoteDeclined || !!nl.antidoteTarget;
+
+    var antidoteStageDone = !!nl.antidoteDeclined || !!nl.antidoteTarget;
     if(!antidoteStageDone){
       html += '<div class="eyebrow">階段一・解藥</div>';
-      if(deathSeat===0){
+      if(ab.antidoteUsed){
+        html += '<p class="small muted">解藥已經用完了。</p><button class="btn btn-primary btn-block" data-act="night-witch-nosave">知道了，繼續</button>';
+      } else if(deathSeat===0){
         html += '<p class="small muted">今晚沒有人受到攻擊，沒有目標可以救。</p><button class="btn btn-primary btn-block" data-act="night-witch-nosave">知道了，繼續</button>';
       } else if(!selfSaveOk){
         html += '<p class="small muted">被攻擊的是女巫自己，依規則本局不可自救。</p><button class="btn btn-primary btn-block" data-act="night-witch-nosave">知道了，繼續</button>';
@@ -902,19 +903,26 @@ function renderNightGroupAction(group){
       html += '</div>';
       return html;
     }
+
     var poisonBlockedBySameNight = !!nl.antidoteTarget && !rc().witchBothPotionsSameNight;
-    var poisonStageDone = ab.poisonUsed || !!nl.poisonDeclined || !!nl.poisonTarget || poisonBlockedBySameNight;
+    var poisonStageDone = !!nl.poisonDeclined || !!nl.poisonTarget;
     if(!poisonStageDone){
       html += '<div class="eyebrow">階段二・毒藥</div>';
-      html += '<div class="field"><label>使用毒藥（可略過）</label><div class="btngrid">'
-        + alive.filter(function(n){return n!==wseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-witch-poison" data-n="'+n+'" data-confirm="確定對 '+n+' 號使用毒藥嗎？（毒藥只有一瓶，用掉就沒有了）">'+n+'</button>';}).join('')
-        + '</div></div>'
-        + '<button class="btn btn-ghost btn-block" data-act="night-witch-nopoison" style="margin-top:8px;">不使用毒藥</button></div>';
+      if(ab.poisonUsed){
+        html += '<p class="small muted">毒藥已經用完了。</p><button class="btn btn-primary btn-block" data-act="night-witch-nopoison">知道了，繼續</button>';
+      } else if(poisonBlockedBySameNight){
+        html += '<p class="small muted">今晚已使用解藥，依規則不能同時使用毒藥。</p><button class="btn btn-primary btn-block" data-act="night-witch-nopoison">知道了，繼續</button>';
+      } else {
+        html += '<div class="field"><label>使用毒藥（可略過）</label><div class="btngrid">'
+          + alive.filter(function(n){return n!==wseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-witch-poison" data-n="'+n+'" data-confirm="確定對 '+n+' 號使用毒藥嗎？（毒藥只有一瓶，用掉就沒有了）">'+n+'</button>';}).join('')
+          + '</div></div>'
+          + '<button class="btn btn-ghost btn-block" data-act="night-witch-nopoison" style="margin-top:8px;">不使用毒藥</button>';
+      }
+      html += '</div>';
       return html;
     }
-    var closeMsg = poisonBlockedBySameNight ? '今晚已使用解藥，依規則不能同時使用毒藥。' : (ab.poisonUsed ? '毒藥已用完。' : '毒藥留到之後再用。');
-    html += '<p class="small muted">'+closeMsg+'</p>'
-      + '<button class="btn btn-primary btn-block" data-act="night-witch-done" style="margin-top:10px;">女巫行動結束</button></div>';
+
+    html += '<button class="btn btn-primary btn-block" data-act="night-witch-done" style="margin-top:10px;">女巫行動結束</button></div>';
     return html;
   }
   if(group==='seer'){
@@ -1112,6 +1120,11 @@ async function processPendingQueue(){
     }
   }
   await updateGame({pending:Object.assign({},pending,{queue:queue,resolvedText:texts})});
+  // 警徽轉移：不管警長是怎麼死的（夜晚被殺、中毒、被投票、決鬥…），都要處理
+  if(seatN===state.game.sheriffSeat){
+    await updateGame({pending:Object.assign({},pending,{queue:queue,resolvedText:texts,awaiting:{seat:seatN,badgeTransfer:true}})});
+    return;
+  }
   var roleDef = role?ROLES[role]:null;
   if(roleDef && roleDef.deathTrigger){
     var used = roleAbilities(seatN).shotUsed;
@@ -1163,6 +1176,17 @@ function renderPendingResolution(){
       + (options.length?'':'<p class="small muted">目前角色池裡的身份都已經標記完了，這代表配置和實際發牌對不上，請到下面「座位管理」手動修正。</p>')
       + '</div>';
   }
+  if(pending.awaiting && pending.awaiting.badgeTransfer){
+    var seat=pending.awaiting.seat;
+    if(rc().badgeTransferMode==='none'){
+      return '<div class="card stack"><h2>警徽作廢</h2><p class="muted small">警長（'+seat+'號）死亡；本局設定為警徽不可轉移，直接撕毀。</p>'
+        + '<button class="btn btn-wolf btn-block" data-act="pending-badge-transfer" data-n="0">確認撕毀警徽</button></div>';
+    }
+    var aliveB=aliveSeatList().filter(function(n){return n!==seat;});
+    return '<div class="card stack"><h2>警徽轉移</h2><p class="muted small">警長（'+seat+'號）死亡，是否移交警徽給任一存活玩家？</p>'
+      + '<div class="btngrid">'+aliveB.map(function(n){return '<button class="btn btn-sm" data-act="pending-badge-transfer" data-n="'+n+'" data-confirm="確定把警徽移交給 '+n+' 號嗎？">'+n+'</button>';}).join('')+'</div>'
+      + '<button class="btn btn-ghost btn-block" data-act="pending-badge-transfer" data-n="0">撕毀警徽</button></div>';
+  }
   if(pending.awaiting){
     var seat=pending.awaiting.seat, role=pending.awaiting.role;
     var alive=aliveSeatList().filter(function(n){return n!==seat;});
@@ -1171,6 +1195,11 @@ function renderPendingResolution(){
       + '<button class="btn btn-ghost btn-block" data-act="pending-shoot" data-n="0">不開槍</button></div>';
   }
   return '<div class="card"><p class="muted">結算處理中…</p></div>';
+}
+async function actPendingBadgeTransfer(n){
+  var pending=state.game.pending;
+  await updateGame({sheriffSeat:n||null, pending:Object.assign({},pending,{awaiting:null})});
+  await processPendingQueue();
 }
 async function actAssignDeathRole(seat, roleId){
   await updateRole(seat,{role:roleId});
@@ -1205,8 +1234,6 @@ function renderDayEngine(){
     html += renderSpeakingOrderTool(false);
   } else if(ds==='lynch_vote'){
     html += renderVoteRunner('lynch');
-  } else if(ds==='badge_transfer'){
-    html += renderBadgeTransfer();
   } else if(ds==='reveal'){
     html += renderRevealStage();
   }
@@ -1233,7 +1260,7 @@ async function actRevealDeaths(){
   await updateGame({pendingRevealTexts:[], dayStage:next, afterReveal:null});
 }
 function renderDaySpecialActions(){
-  if(state.game.pending || state.game.dayStage==='badge_transfer') return '';
+  if(state.game.pending) return '';
   var wwkConfigured = (roleConfigCounts().whitewolfking||0) > findSeatsWithRole('whitewolfking').length;
   var wwk = findAliveSeatWithRole('whitewolfking');
   var knightConfigured = (roleConfigCounts().knight||0) > findSeatsWithRole('knight').length;
@@ -1418,30 +1445,9 @@ async function actFinishVote(kind,result){
     await appendLog(target+' 號當選警長。');
   } else {
     await updateGame({activeVoteId:null});
-    if(state.game.sheriffSeat===target){
-      await updateGame({dayStage:'badge_transfer'});
-    } else {
-      await startResolution([{seat:target,cause:'vote'}],'day-after-vote');
-      await updateGame({dayStage:null});
-    }
+    await startResolution([{seat:target,cause:'vote'}],'day-after-vote');
+    await updateGame({dayStage:null});
   }
-}
-function renderBadgeTransfer(){
-  var sheriff=state.game.sheriffSeat;
-  if(rc().badgeTransferMode==='none'){
-    return '<div class="card stack"><h2>警徽作廢</h2><p class="muted small">警長（'+sheriff+'號）即將出局；本局設定為警徽不可轉移，直接撕毀。</p>'
-      + '<button class="btn btn-wolf btn-block" data-act="transfer-badge" data-n="0">確認撕毀警徽</button></div>';
-  }
-  var alive=aliveSeatList().filter(function(n){return n!==sheriff;});
-  return '<div class="card stack"><h2>警徽轉移</h2><p class="muted small">警長（'+sheriff+'號）即將出局，是否移交警徽給任一存活玩家？</p>'
-    + '<div class="btngrid">'+alive.map(function(n){return '<button class="btn btn-sm" data-act="transfer-badge" data-n="'+n+'" data-confirm="確定把警徽移交給 '+n+' 號嗎？">'+n+'</button>';}).join('')+'</div>'
-    + '<button class="btn btn-ghost btn-block" data-act="transfer-badge" data-n="0">撕毀警徽</button></div>';
-}
-async function actTransferBadge(n){
-  var sheriff=state.game.sheriffSeat;
-  await updateGame({sheriffSeat:n||null});
-  await startResolution([{seat:sheriff,cause:'vote'}],'day-after-vote');
-  await updateGame({dayStage:null});
 }
 
 /* ============ Event 綁定 ============ */
@@ -1665,7 +1671,7 @@ function handleAction(act, el){
     db.collection('votes').doc(vid).update({choices:choices}); return;
   }
   if(act==='finish-vote'){ actFinishVote(el.getAttribute('data-kind'), el.getAttribute('data-result')); return; }
-  if(act==='transfer-badge'){ actTransferBadge(Number(el.getAttribute('data-n'))); return; }
+  if(act==='pending-badge-transfer'){ actPendingBadgeTransfer(Number(el.getAttribute('data-n'))); return; }
   if(act==='wwk-detonate'){
     actWhiteWolfDetonate(Number(el.getAttribute('data-n'))); return;
   }
