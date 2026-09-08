@@ -823,15 +823,19 @@ function renderNightEngine(){
     return '<div class="step '+status+'">'+(i+1)+'. '+NIGHT_GROUP_LABEL[g]+' 睜眼'+(status==='done'?' ✓':'')+'</div>';
   }).join('') + '</div></div>';
 
+  var backBtn = idx>0 ? '<button class="btn btn-ghost btn-block" data-act="night-back" data-confirm="確定要回到上一位角色重新處理嗎？上一位角色這一晚做的選擇會被清空，可以重新選一次。">← 上一步（回到上一位角色重新處理）</button>' : '';
+
   if(idx>=groups.length){
     html += '<div class="card stack"><h2>夜晚結束</h2><p class="muted">所有睜眼流程已完成，可以天亮公布死訊。</p>'
-      + '<button class="btn btn-primary btn-block" data-act="resolve-night">天亮了，公布結果</button></div>';
+      + '<button class="btn btn-primary btn-block" data-act="resolve-night">天亮了，公布結果</button></div>'
+      + backBtn;
     return html;
   }
   var group=groups[idx];
   if(!groupExistsInConfig(group)){
     html += '<div class="gesture"><div class="big">本局沒有「'+NIGHT_GROUP_LABEL[group]+'」角色</div><p class="small">直接略過這一步，不用喊名。</p>'
-      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>'
+      + backBtn;
     return html;
   }
   if(!groupHasAliveRole(group)){
@@ -840,10 +844,11 @@ function renderNightEngine(){
     // 上帝喊名的節奏/內容變化，推測出這個角色已經死亡。上帝內部操作上直接按下一步即可。
     html += '<div class="gesture"><div class="big">請'+NIGHT_GROUP_LABEL[group]+'睜眼</div>'
       + '<p class="small">（稍等一下，不用等待任何回應）接著照樣說：「請'+NIGHT_GROUP_LABEL[group]+'閉眼」。上帝內部備註：此角色已無存活者，操作上直接按下一步即可，不用等待、不用比手勢。</p>'
-      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>'
+      + backBtn;
     return html;
   }
-  html += renderNightGroupAction(group);
+  html += renderNightGroupAction(group) + backBtn;
   return html;
 }
 
@@ -991,9 +996,45 @@ async function nightAdvance(){
 async function actNightGuard(n){
   var seat=findAliveSeatWithRole('guard');
   await ensureNightlog();
-  await db.collection('nightlog').doc(currentNightlogKey()).update({guardTarget:n||null});
+  var nl=currentNightlog();
+  var patch={guardTarget:n||null};
+  // 記下這晚動手前的舊值，「上一步」才能正確復原（不然回去重選會誤判成跟今晚同一人）
+  if(nl.guardBaselineTarget===undefined){ patch.guardBaselineTarget = roleAbilities(seat).guardLastTarget||null; }
+  await db.collection('nightlog').doc(currentNightlogKey()).update(patch);
   if(n) await updateRole(seat,{abilities:Object.assign({},roleAbilities(seat),{guardLastTarget:n})});
   await nightAdvance();
+}
+async function actNightBack(){
+  var groups=activeNightGroups();
+  var idx=state.game.nightStepIndex||0;
+  if(idx<=0) return;
+  var prevGroup=groups[idx-1];
+  var nl=currentNightlog();
+  if(prevGroup==='guard'){
+    var gseat=findAliveSeatWithRole('guard');
+    if(gseat){
+      var baseline = nl.guardBaselineTarget!==undefined ? nl.guardBaselineTarget : null;
+      await updateRole(gseat,{abilities:Object.assign({},roleAbilities(gseat),{guardLastTarget:baseline})});
+    }
+    await db.collection('nightlog').doc(currentNightlogKey()).update({guardTarget:null, guardBaselineTarget:null});
+  } else if(prevGroup==='wolf'){
+    await db.collection('nightlog').doc(currentNightlogKey()).update({wolfTarget:null});
+  } else if(prevGroup==='wolfbeauty'){
+    var bseat=findAliveSeatWithRole('wolfbeauty');
+    if(bseat) await updateRole(bseat,{abilities:Object.assign({},roleAbilities(bseat),{charmedSeat:null})});
+    await db.collection('nightlog').doc(currentNightlogKey()).update({charmTarget:null});
+  } else if(prevGroup==='witch'){
+    var wseat=findAliveSeatWithRole('witch');
+    var abPatch={};
+    if(nl.antidoteTarget){ abPatch.antidoteUsed=false; }
+    if(nl.poisonTarget){ abPatch.poisonUsed=false; }
+    if(wseat && Object.keys(abPatch).length){ await updateRole(wseat,{abilities:Object.assign({},roleAbilities(wseat),abPatch)}); }
+    await db.collection('nightlog').doc(currentNightlogKey()).update({antidoteTarget:null, poisonTarget:null, antidoteDeclined:null, poisonDeclined:null});
+  } else if(prevGroup==='seer'){
+    await db.collection('nightlog').doc(currentNightlogKey()).update({seerTarget:null, seerResult:null, seerPendingTarget:null});
+  }
+  // 獵人步驟純提示、不寫資料，不用清
+  await updateGame({nightStepIndex: idx-1});
 }
 async function actNightWolf(n){
   await ensureNightlog();
@@ -1619,6 +1660,7 @@ function handleAction(act, el){
     return;
   }
   if(act==='night-skip'){ nightAdvance(); return; }
+  if(act==='night-back'){ actNightBack(); return; }
   if(act==='night-guard'){ actNightGuard(Number(el.getAttribute('data-n'))); return; }
   if(act==='night-wolf'){ actNightWolf(Number(el.getAttribute('data-n'))); return; }
   if(act==='night-charm'){ actNightCharm(Number(el.getAttribute('data-n'))); return; }
