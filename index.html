@@ -233,12 +233,14 @@ var FACTION_LABEL={wolf:'狼人陣營',good_god:'好人陣營・神職',good_vil
 var FACTION_BADGE={wolf:'badge-wolf',good_god:'badge-good',good_villager:'badge-muted'};
 
 function nightGroupOrder(rc){
-  var front = rc.guardBeforeWolf!==false ? ['guard','wolf'] : ['wolf','guard'];
+  // 狼美人跟狼人一起睜眼決定殺人目標後，狼人陣營先閉眼，換狼美人單獨睜眼選魅惑對象，
+  // 所以在流程上要排成自己獨立的一步，緊接在「狼人」之後。
+  var front = rc.guardBeforeWolf!==false ? ['guard','wolf','wolfbeauty'] : ['wolf','wolfbeauty','guard'];
   var back = rc.witchBeforeSeer!==false ? ['witch','seer'] : ['seer','witch'];
   // 獵人放在最後：需要知道整晚（狼刀/守衛/女巫）的結果，才能告知能不能開槍
   return front.concat(back).concat(['hunter']);
 }
-var NIGHT_GROUP_LABEL={guard:'守衛',wolf:'狼人',witch:'女巫',seer:'預言家',hunter:'獵人'};
+var NIGHT_GROUP_LABEL={guard:'守衛',wolf:'狼人',wolfbeauty:'狼美人',witch:'女巫',seer:'預言家',hunter:'獵人'};
 
 /* ============ localStorage ============ */
 var LS={
@@ -797,6 +799,7 @@ function groupHasAliveRole(group){
   if(group==='witch') return roleMaybeAlive('witch');
   if(group==='seer') return roleMaybeAlive('seer');
   if(group==='hunter') return roleMaybeAlive('hunter');
+  if(group==='wolfbeauty') return roleMaybeAlive('wolfbeauty');
   if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(roleMaybeAlive);
   return false;
 }
@@ -805,6 +808,7 @@ function groupExistsInConfig(group){
   if(group==='witch') return (roleConfigCounts().witch||0)>0;
   if(group==='seer') return (roleConfigCounts().seer||0)>0;
   if(group==='hunter') return (roleConfigCounts().hunter||0)>0;
+  if(group==='wolfbeauty') return (roleConfigCounts().wolfbeauty||0)>0;
   if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(function(r){return (roleConfigCounts()[r]||0)>0;});
   return false;
 }
@@ -866,19 +870,20 @@ function renderNightGroupAction(group){
       + '<button class="btn btn-ghost btn-block" data-act="night-guard" data-n="0">今晚不守護任何人</button></div>';
   }
   if(group==='wolf'){
-    var beautyPending = (roleConfigCounts().wolfbeauty||0) > findSeatsWithRole('wolfbeauty').length;
-    var beautySeat = findAliveSeatWithRole('wolfbeauty');
-    var html='<div class="card stack"><h2>請狼人睜眼</h2><p class="muted small">全體狼人共同決定今晚擊殺目標（狼人彼此身份不用登記，等死亡時再標記即可）。</p>'
+    var wolfVariants = ['wolfking','whitewolfking'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
+    var variantNote = wolfVariants.length ? ('本局狼人陣營還包含：'+wolfVariants.map(function(r){return ROLES[r].name;}).join('、')+'，他們現在跟普通狼人一起睜眼、共同決定殺人目標即可，沒有額外的夜間動作（能力是死亡/白天才觸發，等時機到了系統會提示）。') : '';
+    return '<div class="card stack"><h2>請狼人睜眼</h2><p class="muted small">全體狼人共同決定今晚擊殺目標（狼人彼此身份不用登記，等死亡時再標記即可）。</p>'
+      + (variantNote?'<p class="small muted">'+variantNote+'</p>':'')
       + '<div class="btngrid">' + alive.map(function(n){return '<button class="btn btn-sm" data-act="night-wolf" data-n="'+n+'" data-confirm="確定狼人今晚殺 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
       + '<button class="btn btn-ghost btn-block" data-act="night-wolf" data-n="0">今晚空刀</button></div>';
-    if(beautyPending){
-      html += pickIdentifyUI('wolfbeauty','狼美人');
-    } else if(beautySeat){
-      html += '<div class="card stack"><h2>狼美人魅惑</h2><p class="muted small">狼美人（'+beautySeat+'號）選擇魅惑對象。</p>'
-        + '<div class="btngrid">' + alive.filter(function(n){return n!==beautySeat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-charm" data-n="'+n+'" data-confirm="確定狼美人魅惑 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
-        + '<button class="btn btn-ghost btn-block" data-act="night-charm" data-n="0">今晚不魅惑</button></div>';
-    }
-    return html;
+  }
+  if(group==='wolfbeauty'){
+    var pickB=pickIdentifyUI('wolfbeauty','狼美人');
+    if(pickB) return pickB;
+    var beautySeat=findAliveSeatWithRole('wolfbeauty');
+    return '<div class="card stack"><h2>請狼美人睜眼</h2><p class="muted small">狼美人（'+beautySeat+'號）選擇今晚魅惑對象（其他狼人已經閉眼，這是她自己單獨的選擇）。</p>'
+      + '<div class="btngrid">' + alive.filter(function(n){return n!==beautySeat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-charm" data-n="'+n+'" data-confirm="確定狼美人魅惑 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
+      + '<button class="btn btn-ghost btn-block" data-act="night-charm" data-n="0">今晚不魅惑</button></div>';
   }
   if(group==='witch'){
     // 不管解藥/毒藥還有沒有，每晚都要走「階段一→階段二」同樣的兩步節奏，
@@ -998,7 +1003,9 @@ async function actNightWolf(n){
 async function actNightCharm(n){
   var beautySeat=findAliveSeatWithRole('wolfbeauty');
   await updateRole(beautySeat,{abilities:Object.assign({},roleAbilities(beautySeat),{charmedSeat:n||null})});
+  await ensureNightlog();
   await db.collection('nightlog').doc(currentNightlogKey()).update({charmTarget:n||null});
+  await nightAdvance();
 }
 async function actWitchSave(n){
   var wseat=findAliveSeatWithRole('witch');
