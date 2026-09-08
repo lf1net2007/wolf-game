@@ -1,0 +1,1409 @@
+<title>狼人殺主持台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+  :root{
+    --bg:#fff1c9; --bg-elevated:#ffffff; --bg-sunken:#ffe39b;
+    --text:#241b3a; --text-muted:#7a6a9c; --border:#241b3a;
+    --dot:rgba(36,27,58,.07);
+    --accent-wolf:#ff4d3d; --accent-wolf-soft:rgba(255,77,61,.18);
+    --accent-brass:#ffb100; --accent-brass-soft:rgba(255,177,0,.22);
+    --accent-good:#1fa971; --accent-good-soft:rgba(31,169,113,.18);
+    --accent-focus:#6c5ce7; --accent-focus-soft:rgba(108,92,231,.16);
+    --font-display:'Bangers',cursive; --font-body:'Noto Sans TC',sans-serif; --font-mono:'Bangers','Noto Sans TC',cursive;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#1b1533; --bg-elevated:#2a2153; --bg-sunken:#140f28;
+      --text:#f3eeff; --text-muted:#b8a9e0; --border:#cdbdf0;
+      --dot:rgba(255,255,255,.06);
+      --accent-wolf:#ff6b5b; --accent-wolf-soft:rgba(255,107,91,.22);
+      --accent-brass:#ffce4d; --accent-brass-soft:rgba(255,206,77,.22);
+      --accent-good:#4fd696; --accent-good-soft:rgba(79,214,150,.2);
+      --accent-focus:#9c8fff; --accent-focus-soft:rgba(156,143,255,.2);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1b1533; --bg-elevated:#2a2153; --bg-sunken:#140f28;
+    --text:#f3eeff; --text-muted:#b8a9e0; --border:#cdbdf0;
+    --dot:rgba(255,255,255,.06);
+    --accent-wolf:#ff6b5b; --accent-wolf-soft:rgba(255,107,91,.22);
+    --accent-brass:#ffce4d; --accent-brass-soft:rgba(255,206,77,.22);
+    --accent-good:#4fd696; --accent-good-soft:rgba(79,214,150,.2);
+    --accent-focus:#9c8fff; --accent-focus-soft:rgba(156,143,255,.2);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background-color:var(--bg);color:var(--text);font-family:var(--font-body);
+    background-image:radial-gradient(var(--dot) 1.6px, transparent 1.6px);
+    background-size:16px 16px;
+  }
+  #app{max-width:640px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;padding-bottom:32px;}
+  h1,h2,h3{font-family:var(--font-body);font-weight:900;text-wrap:balance;margin:0;letter-spacing:.01em;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.03em;}
+  button{font-family:inherit;}
+  button:focus-visible,input:focus-visible{outline:3px solid var(--accent-focus);outline-offset:2px;}
+  a{color:inherit;}
+
+  .topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--bg-elevated);border-bottom:3px solid var(--border);}
+  .topbar .phase{flex:1;min-width:0;}
+  .topbar .phase .label{font-size:11px;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase;font-weight:700;}
+  .topbar .phase .value{font-family:var(--font-body);font-weight:900;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dot{width:13px;height:13px;border-radius:50%;flex:none;border:2px solid var(--border);box-shadow:inset -2px -2px 0 rgba(0,0,0,.15);}
+  .dot.ok{background:var(--accent-good);}
+  .dot.bad{background:var(--accent-wolf);}
+  .dot.pending{background:var(--accent-brass);animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .iconbtn{border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:2px 2px 0 var(--border);}
+  .iconbtn:active{transform:translate(2px,2px);box-shadow:none;}
+
+  .content{padding:16px;display:flex;flex-direction:column;gap:16px;flex:1;}
+  .card{background:var(--bg-elevated);border:3px solid var(--border);border-radius:20px;padding:16px;box-shadow:5px 5px 0 var(--border);}
+  .card + .card{margin-top:0;}
+  .stack{display:flex;flex-direction:column;gap:10px;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .row.wrap{flex-wrap:wrap;}
+  .between{justify-content:space-between;}
+  .muted{color:var(--text-muted);font-size:13px;}
+  .small{font-size:12px;}
+  .eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);font-weight:700;}
+
+  .btn{border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);border-radius:14px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;text-align:center;box-shadow:3px 3px 0 var(--border);}
+  .btn:active{transform:translate(3px,3px);box-shadow:none;}
+  .btn-block{width:100%;}
+  .btn-primary{background:var(--accent-focus);border-color:var(--border);color:#fff;}
+  .btn-wolf{background:var(--accent-wolf);border-color:var(--border);color:#fff;}
+  .btn-good{background:var(--accent-good);border-color:var(--border);color:#fff;}
+  .btn-ghost{background:transparent;box-shadow:none;}
+  .btn-ghost:active{box-shadow:none;}
+  .btn-sm{padding:6px 12px;font-size:13px;border-radius:11px;box-shadow:2px 2px 0 var(--border);}
+  .btn[disabled]{opacity:.4;cursor:not-allowed;box-shadow:none;transform:none;}
+  .btngrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:9px;}
+
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px;border:2px solid var(--border);transform:rotate(-2deg);}
+  .badge-wolf{background:var(--accent-wolf-soft);color:var(--accent-wolf);border-color:var(--accent-wolf);}
+  .badge-good{background:var(--accent-good-soft);color:var(--accent-good);border-color:var(--accent-good);}
+  .badge-brass{background:var(--accent-brass-soft);color:var(--accent-brass);border-color:var(--accent-brass);}
+  .badge-muted{background:var(--bg-sunken);color:var(--text-muted);border-color:var(--border);}
+
+  .seat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:11px;}
+  .seat{position:relative;border:2.5px solid var(--border);border-radius:16px;background:var(--bg-sunken);padding:10px 6px 8px;text-align:center;cursor:pointer;box-shadow:3px 3px 0 var(--border);}
+  .seat .num{font-family:var(--font-mono);font-weight:700;font-size:24px;line-height:1;}
+  .seat .nick{font-size:11px;color:var(--text-muted);margin-top:3px;height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .seat.empty{border-style:dashed;color:var(--text-muted);box-shadow:none;}
+  .seat.dead{opacity:.6;}
+  .seat.dead::after{
+    content:'OUT'; position:absolute; left:0; right:0; top:38%; padding:2px 0; overflow:hidden;
+    font-family:var(--font-mono); font-size:14px; color:#fff; background:var(--accent-wolf);
+    transform:rotate(-11deg); box-shadow:0 0 0 2px var(--border); letter-spacing:.08em; border-radius:3px;
+  }
+  .seat.me{border-color:var(--accent-focus);box-shadow:3px 3px 0 var(--accent-focus);}
+  .seat.sheriff::before{
+    content:'★'; position:absolute; top:-9px; right:-9px; width:22px; height:22px; z-index:2;
+    background:var(--accent-brass); color:#fff; border:2px solid var(--border); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:12px;
+    transform:rotate(14deg); box-shadow:2px 2px 0 var(--border);
+  }
+  .seat.selected{border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);}
+
+  .step{border-left:3px solid var(--border);padding:3px 0 3px 16px;position:relative;font-weight:500;}
+  .step::before{content:'';position:absolute;left:-7px;top:7px;width:11px;height:11px;border-radius:50%;background:var(--bg-sunken);border:2px solid var(--border);}
+  .step.active{border-color:var(--accent-focus);font-weight:700;}
+  .step.active::before{background:var(--accent-focus);}
+  .step.done{border-color:var(--accent-good);color:var(--text-muted);}
+  .step.done::before{background:var(--accent-good);}
+  .step.skip{border-color:var(--bg-sunken);}
+  .step.skip::before{background:var(--bg-sunken);border-color:var(--bg-sunken);}
+
+  .gesture{position:relative;background:var(--accent-brass-soft);border:3px solid var(--accent-brass);border-radius:20px;padding:16px;margin-bottom:8px;}
+  .gesture .big{font-family:var(--font-body);font-weight:900;font-size:16px;color:var(--accent-brass);}
+  .gesture::after{content:'';position:absolute;left:32px;bottom:-13px;width:0;height:0;border:13px solid transparent;border-top-color:var(--accent-brass);border-bottom:0;}
+
+  .vote-row{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;}
+  .vote-bar-track{background:var(--bg-sunken);border:2.5px solid var(--border);border-radius:999px;height:26px;overflow:hidden;position:relative;}
+  .vote-bar-fill{background:var(--accent-wolf);height:100%;border-radius:999px;transition:width .3s;}
+  .vote-bar-label{position:absolute;inset:0;display:flex;align-items:center;padding-left:10px;font-family:var(--font-mono);font-size:13px;font-weight:700;}
+
+  .pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;max-width:220px;margin:0 auto;}
+  .pinpad button{padding:16px 0;font-size:20px;font-family:var(--font-mono);border-radius:14px;border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);box-shadow:3px 3px 0 var(--border);}
+  .pinpad button:active{transform:translate(3px,3px);box-shadow:none;}
+  .pindots{display:flex;justify-content:center;gap:10px;margin:14px 0;}
+  .pindots span{width:14px;height:14px;border-radius:50%;border:2.5px solid var(--border);}
+  .pindots span.fill{background:var(--accent-focus);border-color:var(--border);}
+
+  .home-hero{padding:30px 20px 8px;text-align:center;}
+  .home-hero .moon{font-size:46px;line-height:1;display:inline-block;animation:bob 2.6s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0) rotate(-3deg);}50%{transform:translateY(-6px) rotate(3deg);}}
+  .home-hero h1{font-size:30px;margin-top:8px;}
+  .home-hero p{color:var(--text-muted);font-size:14px;margin-top:6px;font-weight:500;}
+
+  .choice{display:flex;flex-direction:column;gap:14px;padding:0 16px 16px;}
+  .choice-card{display:flex;align-items:center;gap:14px;border:3px solid var(--border);background:var(--bg-elevated);border-radius:20px;padding:16px;cursor:pointer;text-align:left;box-shadow:5px 5px 0 var(--border);}
+  .choice-card:active{transform:translate(4px,4px);box-shadow:none;}
+  .choice-card .ic{font-size:30px;}
+  .choice-card h3{font-size:16px;}
+  .choice-card p{margin:2px 0 0;color:var(--text-muted);font-size:12.5px;}
+
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{font-size:12.5px;color:var(--text-muted);font-weight:700;}
+  .field input[type=text],.field select{padding:9px 10px;border-radius:11px;border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);font-size:14px;}
+  .stepper-ctrl{display:flex;align-items:center;gap:10px;}
+  .stepper-ctrl button{width:32px;height:32px;border-radius:10px;border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);font-size:16px;box-shadow:2px 2px 0 var(--border);}
+  .stepper-ctrl button:active{transform:translate(2px,2px);box-shadow:none;}
+  .stepper-ctrl .n{width:26px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:18px;}
+
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:2px dashed var(--border);}
+  .toggle-row:last-child{border-bottom:none;}
+  .toggle-row .t-label{font-size:13.5px;font-weight:700;}
+  .toggle-row .t-desc{font-size:11.5px;color:var(--text-muted);}
+  .switch{width:44px;height:26px;border-radius:99px;background:var(--bg-sunken);border:2.5px solid var(--border);position:relative;cursor:pointer;flex:none;}
+  .switch::after{content:'';position:absolute;top:1px;left:1px;width:18px;height:18px;border-radius:50%;background:var(--text-muted);border:2px solid var(--border);transition:.15s;}
+  .switch.on{background:var(--accent-good-soft);}
+  .switch.on::after{left:20px;background:var(--accent-good);}
+
+  .log{display:flex;flex-direction:column;gap:7px;max-height:260px;overflow-y:auto;}
+  .log-item{font-size:12.5px;color:var(--text-muted);border-left:3px solid var(--border);padding-left:9px;font-weight:500;}
+
+  .win-banner{position:relative;overflow:hidden;background:var(--bg-elevated);border:4px solid var(--border);border-radius:24px;padding:26px 20px;text-align:center;box-shadow:6px 6px 0 var(--border);}
+  .win-banner::before{
+    content:'';position:absolute;inset:-40%;z-index:0;
+    background:repeating-conic-gradient(var(--accent-brass-soft) 0deg 9deg, transparent 9deg 18deg);
+    animation:spin 50s linear infinite;
+  }
+  .win-banner h2,.win-banner p{position:relative;z-index:1;}
+  .win-banner h2{font-size:24px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .footer-actions{position:sticky;bottom:0;background:var(--bg-elevated);border-top:3px solid var(--border);padding:10px 16px;display:flex;gap:10px;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important;} }
+</style>
+
+<div id="app"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============ 角色登錄表 ============ */
+var ROLES = {
+  villager:{id:'villager',name:'平民',faction:'good_villager',night:false,desc:'無特殊能力。'},
+  wolf:{id:'wolf',name:'狼人',faction:'wolf',night:true,nightGroup:'wolf',desc:'每晚與其他狼人共同睜眼，選擇一位玩家殺害。'},
+  wolfking:{id:'wolfking',name:'狼王',faction:'wolf',night:true,nightGroup:'wolf',deathTrigger:true,desc:'與狼人一同睜眼行動；死亡時可開槍帶走一位玩家。'},
+  whitewolfking:{id:'whitewolfking',name:'白狼王',faction:'wolf',night:true,nightGroup:'wolf',deathTrigger:true,dayDetonate:true,desc:'與狼人一同睜眼行動；白天可自爆並開槍帶走一位玩家，自爆後立即進入夜晚。'},
+  wolfbeauty:{id:'wolfbeauty',name:'狼美人',faction:'wolf',night:true,nightGroup:'wolfbeauty',desc:'每晚魅惑一位玩家；狼美人死亡時，被魅惑者同歸於盡。'},
+  seer:{id:'seer',name:'預言家',faction:'good_god',night:true,nightGroup:'seer',desc:'每晚查驗一位玩家的陣營（好人／狼人）。'},
+  witch:{id:'witch',name:'女巫',faction:'good_god',night:true,nightGroup:'witch',desc:'持有解藥、毒藥各一瓶，可救人或毒人，皆限用一次。'},
+  hunter:{id:'hunter',name:'獵人',faction:'good_god',night:false,deathTrigger:true,desc:'死亡時可開槍帶走一位玩家（若中毒身亡則依規則可能無法開槍）。'},
+  guard:{id:'guard',name:'守衛',faction:'good_god',night:true,nightGroup:'guard',desc:'每晚守護一位玩家免於狼人攻擊；不可連續兩晚守同一人。'},
+  idiot:{id:'idiot',name:'白痴',faction:'good_god',night:false,voteImmunity:true,desc:'被投票放逐時翻牌免死，但永久失去投票權。'},
+  knight:{id:'knight',name:'騎士',faction:'good_god',night:false,duel:true,desc:'白天可指定一人決鬥：猜中狼人則對方死，猜錯則騎士死；每局限一次。'}
+};
+var ROLE_LIST=['villager','wolf','wolfking','whitewolfking','wolfbeauty','seer','witch','hunter','guard','idiot','knight'];
+var FACTION_LABEL={wolf:'狼人陣營',good_god:'好人陣營・神職',good_villager:'好人陣營・平民'};
+var FACTION_BADGE={wolf:'badge-wolf',good_god:'badge-good',good_villager:'badge-muted'};
+
+function nightGroupOrder(rc){
+  var front = rc.guardBeforeWolf!==false ? ['guard','wolf'] : ['wolf','guard'];
+  var back = rc.witchBeforeSeer!==false ? ['witch','seer'] : ['seer','witch'];
+  return front.concat(back);
+}
+var NIGHT_GROUP_LABEL={guard:'守衛',wolf:'狼人',witch:'女巫',seer:'預言家'};
+
+/* ============ localStorage ============ */
+var LS={
+  get:function(k,d){try{var v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;}},
+  set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+};
+
+var ui={
+  mode: LS.get('ww_mode', null),      // 'full' | 'pure'
+  role: LS.get('ww_role', null),      // 'god' | 'player'
+  seat: LS.get('ww_seat_full', null),
+  pureSeat: LS.get('ww_seat_pure', null),
+  pinBuf:'',
+  view:'main',
+  nickDraft:'',
+  targetSel:null,
+  setupDraft:null,
+  speakDraft:null
+};
+
+var dbStatus='connecting'; // connecting | ok | unavailable
+var db=null;
+var state={ game:null, seats:{}, roles:{}, nightlog:{}, votes:{}, pure:null, pureSeats:{}, pureVotes:{} };
+
+var $app=document.getElementById('app');
+
+/* ============ DB init ============ */
+async function boot(){
+  try{
+    db = await claude.use('db');
+  }catch(e){ db=null; }
+  if(!db){ dbStatus='unavailable'; render(); return; }
+  dbStatus='ok';
+  db.doc('game/state').onSnapshot(function(s){ state.game=s.exists?s.data():null; render(); }, function(){ dbStatus='unavailable'; render(); });
+  db.collection('seats').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.seats=m; render(); });
+  db.collection('roles').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.roles=m; render(); });
+  db.collection('nightlog').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.nightlog=m; render(); });
+  db.collection('votes').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.votes=m; render(); });
+  db.doc('pure/state').onSnapshot(function(s){ state.pure=s.exists?s.data():null; render(); });
+  db.collection('pureSeats').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.pureSeats=m; render(); });
+  db.collection('pureVotes').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.pureVotes=m; render(); });
+  render();
+}
+boot();
+setTimeout(function(){ if(dbStatus==='connecting'){ dbStatus='unavailable'; render(); } },10500);
+
+/* ============ 小工具 ============ */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function seatNums(){ var n=(state.game&&state.game.totalSeats)||0; var a=[]; for(var i=1;i<=n;i++)a.push(i); return a; }
+function seatData(n){ return state.seats[String(n)] || {seatNumber:n,occupied:false,alive:true}; }
+function aliveSeatList(){ return seatNums().filter(function(n){ var s=seatData(n); return s.occupied && s.alive; }); }
+function roleOfSeat(n){ var r=state.roles[String(n)]; return r?r.role:null; }
+function roleAbilities(n){ var r=state.roles[String(n)]; return (r&&r.abilities)||{}; }
+function findSeatsWithRole(roleId){ return seatNums().filter(function(n){return roleOfSeat(n)===roleId;}); }
+function findAliveSeatWithRole(roleId){ return findSeatsWithRole(roleId).find(function(n){return seatData(n).alive;}); }
+function nowIso(){ return new Date().toISOString(); }
+function fmtWeight(w){ return (Math.round(w*10)/10).toFixed(w%1?1:0); }
+
+function rc(){ return (state.game&&state.game.ruleConfig)||{}; }
+function roleConfigCounts(){ return (state.game&&state.game.roleConfig)||{}; }
+
+async function updateGame(patch){ await db.doc('game/state').update(patch); }
+async function setGame(obj){ await db.doc('game/state').set(obj); }
+async function updateSeat(n,patch){ await db.collection('seats').doc(String(n)).update(patch).catch(function(){ db.collection('seats').doc(String(n)).set(Object.assign({seatNumber:n,occupied:false,alive:true},patch)); }); }
+async function setSeat(n,obj){ await db.collection('seats').doc(String(n)).set(obj); }
+async function updateRole(n,patch){
+  var ref=db.collection('roles').doc(String(n));
+  var cur=state.roles[String(n)];
+  if(cur){ await ref.update(patch); } else { await ref.set(Object.assign({seatNumber:n,role:null,abilities:{}},patch)); }
+}
+async function appendLog(text){
+  var log=(state.game&&state.game.log)||[];
+  log=log.concat([{t:nowIso(),text:text}]);
+  if(log.length>200) log=log.slice(log.length-200);
+  await updateGame({log:log});
+}
+
+function render(){
+  var html='';
+  html += renderTopbar();
+  html += '<div class="content">' + renderBody() + '</div>';
+  $app.innerHTML = html;
+}
+
+/* ============ Topbar ============ */
+function phaseLabel(){
+  if(ui.mode==='pure') return '純投票模式';
+  if(!state.game) return '尚未開局';
+  if(state.game.winner) return (state.game.winner==='wolf'?'狼人陣營':'好人陣營')+' 獲勝';
+  if(state.game.phase==='lobby') return '籌備中';
+  if(state.game.phase==='night') return '第 '+state.game.nightNumber+' 夜 · 夜晚';
+  if(state.game.phase==='day') return '第 '+state.game.dayNumber+' 天 · 白天';
+  return '';
+}
+function renderTopbar(){
+  var dotCls = dbStatus==='ok' ? 'ok' : (dbStatus==='connecting' ? 'pending' : 'bad');
+  var dotTitle = dbStatus==='ok' ? '資料已連線' : (dbStatus==='connecting' ? '連線中…' : '無法連線資料庫');
+  return '<div class="topbar">'
+    + '<span class="dot '+dotCls+'" title="'+dotTitle+'"></span>'
+    + '<div class="phase"><div class="label">'+(ui.role==='god'?'上帝視角':'圍觀 / 玩家')+'</div><div class="value">'+esc(phaseLabel())+'</div></div>'
+    + '<button class="iconbtn" data-act="home">切換</button>'
+    + '</div>';
+}
+
+/* ============ Body Router ============ */
+function renderBody(){
+  if(dbStatus==='unavailable'){
+    return '<div class="card stack"><h2>連線不到共享資料庫</h2><p class="muted">這個功能需要用 Claude Artifact 開啟並授權「db」共享資料。請確認你是用發布出去的連結、以有效的 Claude 帳號登入後開啟這個頁面；如果重新整理後還是這樣，可能是這個檢視環境本身不支援即時同步，建議直接在瀏覽器分頁開啟正式連結測試。</p></div>';
+  }
+  if(dbStatus==='connecting' && ui.view==='main' && !ui.mode){
+    // 仍可以先看首頁，不擋畫面
+  }
+  if(!ui.mode || ui.view==='mode-select'){ return renderModeSelect(); }
+  if(ui.mode==='pure'){ return renderPureMode(); }
+  return renderFullMode();
+}
+
+/* ============ 首頁：選模式 ============ */
+function renderModeSelect(){
+  var html = '<div class="home-hero"><div class="moon">🐺🌙</div><h1>狼人殺主持台</h1><p>上帝導讀、身分紀錄、上警投票，一支手機到底。</p></div>';
+  html += '<div class="choice">';
+  html += choiceCard('🎬','完整遊戲模式','角色配置、夜晚睜眼導讀、上警與放逐投票、勝負判定。','full');
+  html += choiceCard('🗳️','純投票模式','跳過角色與夜晚流程，只需要座位與計票，備援用。','pure');
+  html += '</div>';
+  return html;
+}
+function choiceCard(ic,title,desc,mode){
+  return '<button class="choice-card" data-act="pick-mode" data-mode="'+mode+'">'
+    + '<div class="ic">'+ic+'</div><div><h3>'+title+'</h3><p>'+desc+'</p></div></button>';
+}
+
+/* ============ 純投票模式 ============ */
+function pureTotalSeats(){ return (state.pure&&state.pure.totalSeats)||0; }
+function pureSeatData(n){ return state.pureSeats[String(n)]||{seatNumber:n,occupied:false}; }
+function pureLatestVoteId(){ return state.pure&&state.pure.activeVoteId; }
+
+function renderPureMode(){
+  if(!ui.role){
+    return backRow('mode-select') + '<div class="choice">'
+      + choiceCard('🎙️','我是計票員','建立座位、發起投票、公布結果。','__pure_god')
+      + choiceCard('🙋','我是玩家','入座並參與投票。','__pure_player')
+      + '</div>';
+  }
+  if(ui.role==='__pure_god_pending'){}
+  var html = backRow('mode-select', switchIdentityBtn());
+  if(!state.pure || !pureTotalSeats()){
+    if(ui.role==='pureplayer'){ return html+'<div class="card"><p class="muted">計票員還沒建立座位，請稍候。</p></div>'; }
+    return html + renderPureSetup();
+  }
+  if(ui.role==='puregod'){
+    html += renderPureGodPanel();
+  } else {
+    html += renderPureSeatBoard(true);
+    html += renderPureVoteView(false);
+  }
+  return html;
+}
+function switchIdentityBtn(){ return '<button class="iconbtn" data-act="switch-identity">切換身分</button>'; }
+function backRow(target,right){
+  return '<div class="row between" style="margin-bottom:-4px;"><button class="iconbtn" data-act="goto" data-view="'+target+'">← 返回</button>'+(right||'')+'</div>';
+}
+
+function renderPureSetup(){
+  var n = ui.setupDraft && ui.setupDraft.pureSeats || 8;
+  return '<div class="card stack">'
+    + '<h2>建立純投票房間</h2>'
+    + '<div class="field"><label>座位數量</label>'
+    + '<div class="stepper-ctrl"><button data-act="pure-n" data-d="-1">－</button><div class="n mono">'+n+'</div><button data-act="pure-n" data-d="1">＋</button></div></div>'
+    + '<button class="btn btn-primary btn-block" data-act="pure-create" data-n="'+n+'">建立並開始</button>'
+    + '</div>';
+}
+function renderPureSeatBoard(withClaim){
+  var n=pureTotalSeats(); var cells='';
+  for(var i=1;i<=n;i++){
+    var s=pureSeatData(i);
+    var isMe = ui.pureSeat===i;
+    var cls='seat'+(!s.occupied?' empty':'')+(isMe?' me':'');
+    cells += '<div class="'+cls+'" '+(withClaim&&!s.occupied?'data-act="pure-claim" data-n="'+i+'"':'')+'>'
+      + '<div class="num mono">'+i+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div></div>';
+  }
+  return '<div class="card stack"><h2>座位</h2><div class="seat-grid">'+cells+'</div>'
+    + (withClaim && ui.pureSeat==null ? '<p class="small muted">點空位入座；入座後這台裝置就代表你這個座位。</p>' : '')
+    + '</div>';
+}
+function renderPureGodPanel(){
+  var html = renderPureSeatBoard(false);
+  html += '<div class="card stack"><h2>發起投票</h2>'
+    + '<div class="field"><label>投票標題（例如：第 3 天放逐投票）</label><input type="text" id="pureVoteLabel" placeholder="放逐投票"></div>';
+  if(state.pure && state.pure.sheriffSeat!=null){
+    html += '<div class="small muted">目前警長：'+state.pure.sheriffSeat+' 號，歸票時算 1.5 票。</div>';
+  } else {
+    html += '<div class="small muted">尚未指定警長，所有票數皆為 1 票。</div>';
+  }
+  html += '<div class="field"><label>指定警長座位（再點一次取消）</label>'
+    + '<div class="btngrid">'+seatPickButtons(rangeArr(1,pureTotalSeats()),'pure-set-sheriff', state.pure&&state.pure.sheriffSeat)+'</div></div>';
+  html += '<button class="btn btn-primary btn-block" data-act="pure-start-vote">開始新一輪投票</button>';
+  html += '<button class="btn btn-ghost btn-block" data-act="pure-reset">重新設定座位人數</button>';
+  html += '</div>';
+  html += renderPureVoteView(true);
+  return html;
+}
+function toggleSwitch(key,on){ return '<span class="switch'+(on?' on':'')+'" data-act="toggle" data-key="'+key+'"></span>'; }
+function rangeArr(a,b){ var r=[]; for(var i=a;i<=b;i++)r.push(i); return r; }
+function seatPickButtons(list,act,selected,extraData){
+  return list.map(function(n){
+    var sel = selected===n;
+    return '<button class="btn btn-sm'+(sel?' btn-primary':'')+'" data-act="'+act+'" data-n="'+n+'"'+(extraData||'')+'>'+n+'</button>';
+  }).join('');
+}
+
+function renderPureVoteView(isGod){
+  var vid = pureLatestVoteId();
+  if(!vid || !state.pureVotes[vid]){
+    return '<div class="card"><p class="muted">目前沒有進行中的投票。</p></div>';
+  }
+  var v = state.pureVotes[vid];
+  var tally=tallyOf(v);
+  var maxT = Math.max(1, Object.keys(tally).length? Math.max.apply(null,Object.values(tally)) : 1);
+  var eligible = rangeArr(1,pureTotalSeats()).filter(function(n){return pureSeatData(n).occupied;});
+  var html='<div class="card stack"><div class="row between"><h2>'+esc(v.label||'投票')+'</h2>'+(v.open?'<span class="badge badge-good">進行中</span>':'<span class="badge badge-muted">已結束</span>')+'</div>';
+  if(isGod && v.sheriffSeat!=null){
+    html += '<label class="toggle-row"><span><span class="t-label">警長歸票（算 1.5 票）</span><br><span class="t-desc">警長（'+v.sheriffSeat+'號）口頭宣告投給誰後再勾選</span></span>'+toggleSwitch('sheriffDeclare:'+v.id, v.sheriffDeclared)+'</label>';
+  }
+  eligible.forEach(function(n){
+    var w=tally[n]||0;
+    var pct = Math.round(w/maxT*100);
+    var mine = ui.pureSeat===n;
+    html += '<div class="vote-row">'
+      + '<div class="mono" style="text-align:right;">'+n+'</div>'
+      + '<div class="vote-bar-track"><div class="vote-bar-fill" style="width:'+pct+'%"></div><div class="vote-bar-label">'+fmtWeight(w)+' 票</div></div>'
+      + (v.open && !isGod && ui.pureSeat!=null ? '<button class="btn btn-sm'+(v.choices&&v.choices[ui.pureSeat]===n?' btn-wolf':'')+'" data-act="pure-vote" data-target="'+n+'">投</button>' : '<span></span>')
+      + '</div>';
+  });
+  if(v.open && ui.pureSeat!=null){
+    html += '<p class="small muted">你目前是 '+ui.pureSeat+' 號座位'+(v.choices&&v.choices[ui.pureSeat]?'，已投給 '+v.choices[ui.pureSeat]+' 號':'，尚未投票')+'。</p>';
+  }
+  if(isGod && v.open){
+    html += '<button class="btn btn-wolf btn-block" data-act="pure-close-vote">結束本輪投票</button>';
+  }
+  html += '</div>';
+  return html;
+}
+function tallyOf(v){
+  var t={}; var choices=v.choices||{};
+  Object.keys(choices).forEach(function(seat){
+    var target=choices[seat];
+    var w = (v.sheriffSeat!=null && Number(seat)===Number(v.sheriffSeat) && v.sheriffDeclared) ? 1.5 : 1;
+    t[target]=(t[target]||0)+w;
+  });
+  return t;
+}
+
+/* ============ 完整遊戲模式 ============ */
+function renderFullMode(){
+  if(!ui.role){
+    return backRow('mode-select') + '<div class="choice">'
+      + choiceCard('👁️','我是上帝','設定角色、主持夜晚與白天流程。','__full_god')
+      + choiceCard('🙋','我是玩家 / 圍觀','入座、看局況、投票。','__full_player')
+      + '</div>';
+  }
+  var html = backRow('mode-select', switchIdentityBtn());
+  if(ui.role==='fullgod'){
+    html += renderGodFlow();
+  } else {
+    html += renderPlayerFlow();
+  }
+  return html;
+}
+
+/* ---- God PIN gate ---- */
+function godUnlocked(){
+  if(!state.game || !state.game.godPin) return true; // 尚未設定 PIN（籌備中）
+  return LS.get('ww_god_pin','') === state.game.godPin;
+}
+function renderGodFlow(){
+  if(!state.game){
+    return renderSetupWizard();
+  }
+  if(!godUnlocked()){
+    return renderPinGate();
+  }
+  if(state.game.phase==='lobby'){
+    return renderLobbyGod();
+  }
+  return renderGodConsole();
+}
+function renderPinGate(){
+  var buf=ui.pinBuf||'';
+  var dots=''; for(var i=0;i<4;i++) dots+='<span class="'+(i<buf.length?'fill':'')+'"></span>';
+  var keys=[1,2,3,4,5,6,7,8,9,'',0,'⌫'];
+  return '<div class="card"><h2 style="text-align:center;">輸入上帝 PIN</h2>'
+    + '<div class="pindots">'+dots+'</div>'
+    + '<div class="pinpad">'+keys.map(function(k){
+        if(k==='') return '<span></span>';
+        return '<button data-act="pin-key" data-k="'+k+'">'+k+'</button>';
+      }).join('')+'</div>'
+    + '<p class="small muted" style="text-align:center;margin-top:10px;">忘記 PIN 只能請目前握有上帝主控台的人查看，或重置整局。</p>'
+    + '</div>';
+}
+
+/* ---- 開局設定精靈 ---- */
+function defaultSetupDraft(){
+  return {
+    roleConfig:{villager:3,wolf:3,seer:1,witch:1,hunter:1},
+    ruleConfig:{
+      factionWin:'edge', witchSelfSaveFirstNight:false, witchBothPotionsSameNight:false,
+      hunterCanShootIfPoisoned:false, wolfKingCanShootIfPoisoned:false, guardWitchOverlapKills:false,
+      guardBeforeWolf:true, witchBeforeSeer:true, sheriffEnabled:true, badgeTransferMode:'any', callDeadRoles:false
+    },
+    pin:String(Math.floor(1000+Math.random()*9000))
+  };
+}
+function renderSetupWizard(){
+  if(!ui.setupDraft) ui.setupDraft=defaultSetupDraft();
+  var d=ui.setupDraft;
+  var total=0, factionCount={wolf:0,good_god:0,good_villager:0};
+  ROLE_LIST.forEach(function(rid){ var c=d.roleConfig[rid]||0; total+=c; factionCount[ROLES[rid].faction]+=c; });
+  var html='<div class="card stack"><h2>開局設定</h2><p class="muted small">下面是範例配置（可直接調整），角色以實體卡牌發放，這裡只是同步登記給主持台。</p>';
+  html += '<div class="row wrap" style="gap:6px;">'
+    + '<span class="badge badge-wolf">狼 '+factionCount.wolf+'</span>'
+    + '<span class="badge badge-good">神 '+factionCount.good_god+'</span>'
+    + '<span class="badge badge-muted">民 '+factionCount.good_villager+'</span>'
+    + '<span class="badge badge-brass">共 '+total+' 人</span></div>';
+  html += '<div class="stack">' + ROLE_LIST.map(function(rid){
+      var role=ROLES[rid]; var c=d.roleConfig[rid]||0;
+      return '<div class="row between">'
+        + '<div><span class="badge '+FACTION_BADGE[role.faction]+'" style="margin-right:6px;">'+role.name+'</span>'
+        + '<span class="small muted">'+role.desc+'</span></div>'
+        + '<div class="stepper-ctrl"><button data-act="role-n" data-r="'+rid+'" data-d="-1">－</button><div class="n mono">'+c+'</div><button data-act="role-n" data-r="'+rid+'" data-d="1">＋</button></div>'
+        + '</div>';
+    }).join('') + '</div>';
+  if(factionCount.wolf===0) html+='<p class="small" style="color:var(--accent-wolf);">⚠️ 目前沒有狼人。</p>';
+  html += '</div>';
+
+  html += '<div class="card stack"><h2>規則細節</h2>';
+  html += toggleRow('guardBeforeWolf', d.ruleConfig.guardBeforeWolf, '守衛先於狼人睜眼', '關閉則狼人先手');
+  html += toggleRow('witchBeforeSeer', d.ruleConfig.witchBeforeSeer, '女巫先於預言家睜眼', '關閉則預言家先手');
+  html += toggleRow('witchSelfSaveFirstNight', d.ruleConfig.witchSelfSaveFirstNight, '女巫首夜可自救', '之後每晚一律不可自救');
+  html += toggleRow('witchBothPotionsSameNight', d.ruleConfig.witchBothPotionsSameNight, '女巫可同一晚解藥毒藥並用', '關閉則兩種藥同晚只能擇一');
+  html += toggleRow('guardWitchOverlapKills', d.ruleConfig.guardWitchOverlapKills, '同守同救仍會死亡', '啟用「合刀」規則');
+  html += toggleRow('hunterCanShootIfPoisoned', d.ruleConfig.hunterCanShootIfPoisoned, '獵人中毒仍可開槍', '關閉則女巫毒死獵人時不能開槍');
+  html += toggleRow('wolfKingCanShootIfPoisoned', d.ruleConfig.wolfKingCanShootIfPoisoned, '狼王中毒仍可開槍', '關閉則女巫毒死狼王時不能開槍');
+  html += toggleRow('sheriffEnabled', d.ruleConfig.sheriffEnabled, '啟用上警流程', '第一天白天先跑警長選舉');
+  html += toggleRow('callDeadRoles', d.ruleConfig.callDeadRoles, '死亡角色仍照喊名（僅供節奏）', '關閉則死亡角色直接跳過不喊');
+  html += '<div class="field"><label>陣營勝利判定</label><select id="factionWinSel" data-act="select" data-key="factionWin">'
+    + '<option value="edge"'+(d.ruleConfig.factionWin==='edge'?' selected':'')+'>屠邊（神職或平民其中一邊死光）</option>'
+    + '<option value="city"'+(d.ruleConfig.factionWin==='city'?' selected':'')+'>屠城（所有好人死光）</option>'
+    + '</select></div>';
+  html += '<div class="field"><label>警徽轉移規則</label><select data-act="select" data-key="badgeTransferMode">'
+    + '<option value="any"'+(d.ruleConfig.badgeTransferMode==='any'?' selected':'')+'>可移交給任一存活玩家</option>'
+    + '<option value="none"'+(d.ruleConfig.badgeTransferMode==='none'?' selected':'')+'>不可移交（直接作廢）</option>'
+    + '</select></div>';
+  html += '</div>';
+
+  html += '<div class="card stack"><h2>上帝 PIN</h2><p class="muted small">開局後想再打開上帝主控台需要輸入這組 PIN。</p>'
+    + '<div class="field"><input type="text" inputmode="numeric" maxlength="6" value="'+esc(d.pin)+'" data-act="pin-draft"></div></div>';
+
+  html += '<button class="btn btn-primary btn-block" data-act="create-game">建立座位並開始登記身分（共 '+total+' 人）</button>';
+  return html;
+}
+function toggleRow(key,on,label,desc){
+  return '<div class="toggle-row"><div><div class="t-label">'+label+'</div><div class="t-desc">'+desc+'</div></div>'+toggleSwitch('rule:'+key,on)+'</div>';
+}
+
+/* ---- Lobby（上帝端：登記身分 / 等玩家入座）---- */
+function occupiedCount(){ return seatNums().filter(function(n){return seatData(n).occupied;}).length; }
+function rolesRegisteredCount(){ return seatNums().filter(function(n){return !!roleOfSeat(n);}).length; }
+function renderLobbyGod(){
+  var total=state.game.totalSeats;
+  var html='<div class="card stack"><h2>等待入座</h2>'
+    + '<p class="muted">已入座 '+occupiedCount()+' / '+total+'。上帝 PIN：<span class="mono">'+esc(state.game.godPin)+'</span></p>'
+    + renderSeatGridInline() + '</div>';
+  html += '<div class="card stack"><h2>登記身分</h2><p class="muted small">依照實體發牌結果，把每個座位對應的角色選好；全部登記完成即可進入第一夜。</p>';
+  seatNums().forEach(function(n){
+    var s=seatData(n); var role=roleOfSeat(n);
+    html += '<div class="row between"><div class="mono" style="width:28px;">'+n+'</div>'
+      + '<div class="small muted" style="flex:1;">'+(s.occupied?esc(s.nickname||'（未取暱稱）'):'尚未入座')+'</div>'
+      + '<select data-act="assign-role" data-n="'+n+'" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-sunken);color:var(--text);">'
+      + '<option value="">－</option>'
+      + ROLE_LIST.filter(function(r){return (roleConfigCounts()[r]||0)>0;}).map(function(r){return '<option value="'+r+'"'+(role===r?' selected':'')+'>'+ROLES[r].name+'</option>';}).join('')
+      + '</select></div>';
+  });
+  var need = 0; ROLE_LIST.forEach(function(r){ need += roleConfigCounts()[r]||0; });
+  var assignedByRole={}; seatNums().forEach(function(n){ var r=roleOfSeat(n); if(r) assignedByRole[r]=(assignedByRole[r]||0)+1; });
+  var mismatch = ROLE_LIST.filter(function(r){ return (assignedByRole[r]||0) !== (roleConfigCounts()[r]||0); });
+  if(mismatch.length){
+    html += '<p class="small" style="color:var(--accent-brass);">尚未對齊設定：'+mismatch.map(function(r){return ROLES[r].name+'('+(assignedByRole[r]||0)+'/'+(roleConfigCounts()[r]||0)+')';}).join('、')+'</p>';
+  }
+  html += '<button class="btn btn-primary btn-block" data-act="start-night1" '+(mismatch.length||rolesRegisteredCount()<total?'disabled':'')+'>登記完成，天黑請閉眼（進入第一夜）</button>';
+  html += '<button class="btn btn-ghost btn-block" data-act="reset-game">重置整局</button>';
+  html += '</div>';
+  return html;
+}
+function renderSeatGridInline(){
+  var cells=seatNums().map(function(n){
+    var s=seatData(n);
+    return '<div class="seat'+(!s.occupied?' empty':'')+'">'
+      + '<div class="num mono">'+n+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div></div>';
+  }).join('');
+  return '<div class="seat-grid">'+cells+'</div>';
+}
+
+/* ---- 玩家 / 圍觀畫面（完整模式）---- */
+function renderPlayerFlow(){
+  if(!state.game){
+    return '<div class="card"><p class="muted">上帝還沒建立這一局，請稍候。</p></div>';
+  }
+  var html = renderPublicBoard();
+  if(state.game.phase==='night'){
+    html += '<div class="card"><h2>🌙 夜晚時間</h2><p class="muted">請依照上帝口令行動，畫面不會顯示夜間細節。</p></div>';
+  }
+  if(state.game.phase==='day'){
+    html += renderDayPublicPanels();
+  }
+  if(state.game.winner){
+    html += renderWinBanner();
+  }
+  html += renderPublicLog();
+  return html;
+}
+function renderPublicBoard(){
+  var cells = seatNums().map(function(n){
+    var s=seatData(n); var isMe = ui.seat===n;
+    var cls='seat'+(!s.occupied?' empty':'')+(!s.alive?' dead':'')+(isMe?' me':'')+(state.game.sheriffSeat===n?' sheriff':'');
+    var claimable = !s.occupied && ui.seat==null;
+    return '<div class="'+cls+'" '+(claimable?'data-act="claim-seat" data-n="'+n+'"':'')+'>'
+      + '<div class="num mono">'+n+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div></div>';
+  }).join('');
+  var html='<div class="card stack"><div class="row between"><h2>座位</h2>'+(state.game.sheriffSeat?'<span class="badge badge-brass">★ 警長 '+state.game.sheriffSeat+' 號</span>':'')+'</div>'
+    + '<div class="seat-grid">'+cells+'</div>';
+  if(ui.seat==null){ html += '<p class="small muted">點空位入座，成為那個座位的玩家（這台裝置會記住）。</p>'; }
+  else { html += '<p class="small muted">你是 '+ui.seat+' 號。</p>'; }
+  html += '</div>';
+  return html;
+}
+function renderDayPublicPanels(){
+  var html='';
+  var ds = state.game.dayStage;
+  if(ds==='sheriff_speech' || ds==='sheriff_vote'){
+    html += renderSpeakingOrderCard(state.game.speakingOrder);
+  }
+  if(ds==='speech'){
+    html += renderSpeakingOrderCard(state.game.speakingOrder);
+  }
+  var voteId = state.game.activeVoteId;
+  if(voteId && state.votes[voteId]){
+    html += renderVoteCardFull(state.votes[voteId], false);
+  }
+  return html;
+}
+function renderSpeakingOrderCard(order){
+  if(!order || !order.length) return '';
+  return '<div class="card stack"><h2>發言順序</h2><div class="row wrap">'
+    + order.map(function(n,idx){ return '<span class="badge '+(idx===0?'badge-brass':'badge-muted')+'">'+(idx+1)+'. '+n+'號</span>'; }).join('')
+    + '</div></div>';
+}
+function renderWinBanner(){
+  return '<div class="win-banner"><h2>🏆 '+(state.game.winner==='wolf'?'狼人陣營獲勝':'好人陣營獲勝')+'</h2><p class="muted">上帝可以在主控台重置，開始下一局。</p></div>';
+}
+function renderPublicLog(){
+  var log=(state.game.log||[]).slice().reverse().slice(0,40);
+  if(!log.length) return '';
+  return '<div class="card"><h2 style="margin-bottom:8px;">戰況紀錄</h2><div class="log">'+log.map(function(l){return '<div class="log-item">'+esc(l.text)+'</div>';}).join('')+'</div></div>';
+}
+
+/* ---- 上帝主控台（開局後）---- */
+function renderGodConsole(){
+  var html='';
+  if(state.game.winner){ html += renderWinBanner() + '<div class="card"><button class="btn btn-primary btn-block" data-act="reset-game">開始新的一局</button></div>'; return html + renderGodBottomTools(); }
+  if(state.game.pending){ html += renderPendingResolution(); return html; }
+  if(state.game.phase==='night'){ html += renderNightEngine(); }
+  if(state.game.phase==='day'){ html += renderDayEngine(); }
+  html += renderGodBottomTools();
+  return html;
+}
+function renderGodBottomTools(){
+  var html='<div class="card stack"><h2>座位管理</h2>';
+  seatNums().forEach(function(n){
+    var s=seatData(n); var role=roleOfSeat(n);
+    html += '<div class="row between small">'
+      + '<span class="mono">'+n+'</span>'
+      + '<span class="muted" style="flex:1;">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+(role?' · '+ROLES[role].name:'')+(!s.alive?' · 已死亡':'')+'</span>'
+      + '<button class="btn btn-sm" data-act="toggle-alive" data-n="'+n+'">'+(s.alive?'標記死亡':'復活')+'</button>'
+      + '<button class="btn btn-sm btn-ghost" data-act="clear-seat" data-n="'+n+'">清空</button>'
+      + '</div>';
+  });
+  html += '<button class="btn btn-ghost btn-block" data-act="reset-game" style="margin-top:6px;">重置整局</button>';
+  html += '</div>';
+  html += '<div class="card stack"><h2>上帝紀錄簿（僅上帝看得到）</h2>' + renderGodOnlyLog() + '</div>';
+  return html;
+}
+function renderGodOnlyLog(){
+  var items=[];
+  Object.keys(state.nightlog).sort().forEach(function(k){
+    var nl=state.nightlog[k];
+    items.push('【'+k+'】守='+(nl.guardTarget||'-')+' 狼刀='+(nl.wolfTarget||'-')+' 女巫解='+(nl.antidoteTarget||'-')+' 女巫毒='+(nl.poisonTarget||'-')+' 預言='+(nl.seerTarget?nl.seerTarget+'→'+nl.seerResult:'-'));
+  });
+  if(!items.length) return '<p class="muted small">尚無紀錄。</p>';
+  return '<div class="log">'+items.map(function(t){return '<div class="log-item">'+esc(t)+'</div>';}).join('')+'</div>';
+}
+
+/* ---- 夜晚引擎 ---- */
+function currentNightlogKey(){ return 'night-'+state.game.nightNumber; }
+function currentNightlog(){ return state.nightlog[currentNightlogKey()] || {}; }
+async function ensureNightlog(){
+  var key=currentNightlogKey();
+  if(!state.nightlog[key]){ await db.collection('nightlog').doc(key).set({night:state.game.nightNumber}); }
+}
+function activeNightGroups(){ return nightGroupOrder(rc()); }
+
+function groupHasAliveRole(group){
+  if(group==='guard') return !!findAliveSeatWithRole('guard');
+  if(group==='witch') return !!findAliveSeatWithRole('witch');
+  if(group==='seer') return !!findAliveSeatWithRole('seer');
+  if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(function(r){return !!findAliveSeatWithRole(r);});
+  return false;
+}
+function groupExistsInConfig(group){
+  if(group==='guard') return (roleConfigCounts().guard||0)>0;
+  if(group==='witch') return (roleConfigCounts().witch||0)>0;
+  if(group==='seer') return (roleConfigCounts().seer||0)>0;
+  if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(function(r){return (roleConfigCounts()[r]||0)>0;});
+  return false;
+}
+
+function renderNightEngine(){
+  ensureNightlog();
+  var groups=activeNightGroups();
+  var idx=state.game.nightStepIndex||0;
+  var html='<div class="card stack"><h2>🌙 第 '+state.game.nightNumber+' 夜 導讀</h2>';
+  html += '<div class="stack">' + groups.map(function(g,i){
+    var status = i<idx?'done':(i===idx?'active':'');
+    return '<div class="step '+status+'">'+(i+1)+'. '+NIGHT_GROUP_LABEL[g]+' 睜眼'+(status==='done'?' ✓':'')+'</div>';
+  }).join('') + '</div></div>';
+
+  if(idx>=groups.length){
+    html += '<div class="card stack"><h2>夜晚結束</h2><p class="muted">所有睜眼流程已完成，可以天亮公布死訊。</p>'
+      + '<button class="btn btn-primary btn-block" data-act="resolve-night">天亮了，公布結果</button></div>';
+    return html;
+  }
+  var group=groups[idx];
+  if(!groupExistsInConfig(group)){
+    html += '<div class="gesture"><div class="big">本局沒有「'+NIGHT_GROUP_LABEL[group]+'」角色</div><p class="small">直接略過這一步，不用喊名。</p>'
+      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+    return html;
+  }
+  if(!groupHasAliveRole(group)){
+    var callAnyway = rc().callDeadRoles;
+    html += '<div class="gesture"><div class="big">'+(callAnyway?('請照喊「'+NIGHT_GROUP_LABEL[group]+'請睜眼」（其實已無存活者，純為節奏，直接跳過）'):('「'+NIGHT_GROUP_LABEL[group]+'」已無存活者，直接略過不用喊名'))+'</div>'
+      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+    return html;
+  }
+  html += renderNightGroupAction(group);
+  return html;
+}
+
+function renderNightGroupAction(group){
+  var alive = aliveSeatList();
+  if(group==='guard'){
+    var seat=findAliveSeatWithRole('guard');
+    var last=roleAbilities(seat).guardLastTarget;
+    var options = alive.filter(function(n){ return n!==last; });
+    return '<div class="card stack"><h2>請守衛睜眼</h2><p class="muted small">守衛（'+seat+'號）選擇今晚守護對象；不能與昨晚相同（'+(last||'無')+'）。</p>'
+      + '<div class="btngrid">' + options.map(function(n){return '<button class="btn btn-sm" data-act="night-guard" data-n="'+n+'">'+n+'</button>';}).join('') + '</div>'
+      + '<button class="btn btn-ghost btn-block" data-act="night-guard" data-n="0">今晚不守護任何人</button></div>';
+  }
+  if(group==='wolf'){
+    var wolves = alive.filter(function(n){ var r=roleOfSeat(n); return r==='wolf'||r==='wolfking'||r==='whitewolfking'; });
+    var beautySeat = findAliveSeatWithRole('wolfbeauty');
+    var html='<div class="card stack"><h2>請狼人睜眼</h2><p class="muted small">存活狼人：'+wolves.join('、')+'號。共同決定今晚擊殺目標。</p>'
+      + '<div class="btngrid">' + alive.map(function(n){return '<button class="btn btn-sm" data-act="night-wolf" data-n="'+n+'">'+n+'</button>';}).join('') + '</div>'
+      + '<button class="btn btn-ghost btn-block" data-act="night-wolf" data-n="0">今晚空刀</button></div>';
+    if(beautySeat){
+      html += '<div class="card stack"><h2>狼美人魅惑</h2><p class="muted small">狼美人（'+beautySeat+'號）選擇魅惑對象。</p>'
+        + '<div class="btngrid">' + alive.filter(function(n){return n!==beautySeat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-charm" data-n="'+n+'">'+n+'</button>';}).join('') + '</div>'
+        + '<button class="btn btn-ghost btn-block" data-act="night-charm" data-n="0">今晚不魅惑</button></div>';
+    }
+    return html;
+  }
+  if(group==='witch'){
+    var wseat=findAliveSeatWithRole('witch');
+    var ab=roleAbilities(wseat);
+    var nl=currentNightlog();
+    var deathSeat = nl.wolfTarget || 0;
+    // 自救規則：目標是女巫本人時，只有「首夜可自救」開啟且為第一夜才允許
+    var selfSaveOk = deathSeat!==wseat || (rc().witchSelfSaveFirstNight && state.game.nightNumber===1);
+    var canAntidote = !ab.antidoteUsed && deathSeat>0 && selfSaveOk;
+    var canPoison = !ab.poisonUsed && (rc().witchBothPotionsSameNight || !nl.antidoteTarget);
+    var html='<div class="card stack"><h2>請女巫睜眼</h2>'
+      + '<p class="muted small">今晚死訊：'+(deathSeat?deathSeat+' 號被攻擊':'無人被攻擊')+'。解藥'+(ab.antidoteUsed?'已用完':'剩 1 瓶')+'／毒藥'+(ab.poisonUsed?'已用完':'剩 1 瓶')+'。</p>';
+    if(deathSeat){
+      html += '<div class="row wrap">'
+        + (canAntidote?'<button class="btn btn-good" data-act="night-witch-save" data-n="'+deathSeat+'">使用解藥救 '+deathSeat+' 號</button>':'')
+        + '<button class="btn btn-ghost" data-act="night-witch-nosave">不使用解藥</button></div>';
+    }
+    if(canPoison){
+      html += '<div class="field" style="margin-top:8px;"><label>使用毒藥（可略過）</label><div class="btngrid">'
+        + alive.filter(function(n){return n!==wseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-witch-poison" data-n="'+n+'">'+n+'</button>';}).join('')
+        + '</div></div>';
+    }
+    html += '<button class="btn btn-primary btn-block" data-act="night-witch-done" style="margin-top:10px;">女巫行動結束</button></div>';
+    return html;
+  }
+  if(group==='seer'){
+    var sseat=findAliveSeatWithRole('seer');
+    return '<div class="card stack"><h2>請預言家睜眼</h2><p class="muted small">預言家（'+sseat+'號）選擇一位查驗。</p>'
+      + '<div class="btngrid">' + alive.filter(function(n){return n!==sseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-seer" data-n="'+n+'">'+n+'</button>';}).join('') + '</div></div>';
+  }
+  return '';
+}
+
+/* ---- 夜晚行動處理 ---- */
+async function nightAdvance(){
+  var groups=activeNightGroups();
+  var idx=(state.game.nightStepIndex||0)+1;
+  await updateGame({nightStepIndex:idx});
+}
+async function actNightGuard(n){
+  var seat=findAliveSeatWithRole('guard');
+  await ensureNightlog();
+  await db.collection('nightlog').doc(currentNightlogKey()).update({guardTarget:n||null});
+  if(n) await updateRole(seat,{abilities:Object.assign({},roleAbilities(seat),{guardLastTarget:n})});
+  await nightAdvance();
+}
+async function actNightWolf(n){
+  await ensureNightlog();
+  await db.collection('nightlog').doc(currentNightlogKey()).update({wolfTarget:n||null});
+  await nightAdvance();
+}
+async function actNightCharm(n){
+  var beautySeat=findAliveSeatWithRole('wolfbeauty');
+  await updateRole(beautySeat,{abilities:Object.assign({},roleAbilities(beautySeat),{charmedSeat:n||null})});
+  await db.collection('nightlog').doc(currentNightlogKey()).update({charmTarget:n||null});
+}
+async function actWitchSave(n){
+  var wseat=findAliveSeatWithRole('witch');
+  await db.collection('nightlog').doc(currentNightlogKey()).update({antidoteTarget:n});
+  await updateRole(wseat,{abilities:Object.assign({},roleAbilities(wseat),{antidoteUsed:true})});
+}
+async function actWitchPoison(n){
+  var wseat=findAliveSeatWithRole('witch');
+  await db.collection('nightlog').doc(currentNightlogKey()).update({poisonTarget:n});
+  await updateRole(wseat,{abilities:Object.assign({},roleAbilities(wseat),{poisonUsed:true})});
+}
+async function actNightSeer(n){
+  var sseat=findAliveSeatWithRole('seer');
+  var targetRole=roleOfSeat(n);
+  var result = targetRole && ROLES[targetRole].faction==='wolf' ? '狼人' : '好人';
+  await db.collection('nightlog').doc(currentNightlogKey()).update({seerTarget:n,seerResult:result});
+  var hist=(roleAbilities(sseat).checkedHistory)||[];
+  hist=hist.concat([{n:n,result:result,night:state.game.nightNumber}]);
+  await updateRole(sseat,{abilities:Object.assign({},roleAbilities(sseat),{checkedHistory:hist})});
+  await nightAdvance();
+}
+
+/* ---- 死亡結算引擎（夜晚 & 白天共用）---- */
+async function resolveNight(){
+  var nl=currentNightlog();
+  var deaths=[];
+  var wolfTarget=nl.wolfTarget||0;
+  if(wolfTarget){
+    var savedByGuard = nl.guardTarget===wolfTarget;
+    var savedByWitch = nl.antidoteTarget===wolfTarget;
+    if(savedByGuard && savedByWitch && rc().guardWitchOverlapKills){ deaths.push({seat:wolfTarget,cause:'wolf'}); }
+    else if(savedByGuard || savedByWitch){ /* 存活 */ }
+    else { deaths.push({seat:wolfTarget,cause:'wolf'}); }
+  }
+  if(nl.poisonTarget){ deaths.push({seat:nl.poisonTarget,cause:'poison'}); }
+  var seen={}; deaths=deaths.filter(function(d){ if(seen[d.seat])return false; seen[d.seat]=true; return true; });
+  await startResolution(deaths,'night');
+}
+async function startResolution(deaths,context){
+  await updateGame({ pending:{ queue:deaths, awaiting:null, context:context, resolvedText:[] } });
+  await processPendingQueue();
+}
+async function processPendingQueue(){
+  var g = state.game; if(!g || !g.pending) return;
+  var pending = g.pending;
+  if(pending.awaiting) return; // 等待上帝輸入
+  var queue = pending.queue.slice();
+  if(!queue.length){
+    // 結算完成
+    var texts = pending.resolvedText||[];
+    for (var i=0;i<texts.length;i++) await appendLog(texts[i]);
+    var context = pending.context;
+    await updateGame({pending:null});
+    var winner=checkWin();
+    if(winner){ await updateGame({winner:winner}); return; }
+    if(context==='night'){
+      await updateGame({phase:'day', dayNumber:(state.game.dayNumber||0)+1, dayStage: (state.game.dayNumber||0)===0 && rc().sheriffEnabled ? 'sheriff_call' : 'speech_setup'});
+    } else if(context==='detonate' || context==='day-after-vote'){
+      await updateGame({phase:'night', nightNumber:(state.game.nightNumber||0)+1, nightStepIndex:0, dayStage:null});
+    }
+    return;
+  }
+  var d = queue.shift();
+  var seatN = d.seat, cause=d.cause;
+  var s = seatData(seatN);
+  if(!s.alive){ // 已經死了，略過
+    await updateGame({pending:Object.assign({},pending,{queue:queue})});
+    return processPendingQueue();
+  }
+  var role = roleOfSeat(seatN);
+  var texts = (pending.resolvedText||[]);
+  if(role==='idiot' && cause==='vote' && !roleAbilities(seatN).idiotRevealed){
+    await updateRole(seatN,{abilities:Object.assign({},roleAbilities(seatN),{idiotRevealed:true})});
+    await updateSeat(seatN,{loseVoteRights:true});
+    texts=texts.concat([seatN+' 號玩家身分公開，免於出局，但永久失去投票權。']);
+    await updateGame({pending:Object.assign({},pending,{queue:queue,resolvedText:texts})});
+    return processPendingQueue();
+  }
+  await updateSeat(seatN,{alive:false,deathCause:cause});
+  texts=texts.concat([seatN+' 號玩家死亡。']);
+  // 狼美人殉情
+  var beautySeat = findSeatsWithRole('wolfbeauty')[0];
+  if(beautySeat===seatN){
+    var charmed = roleAbilities(seatN).charmedSeat;
+    if(charmed && seatData(charmed).alive){
+      queue.push({seat:charmed,cause:'heartbreak'});
+    }
+  }
+  await updateGame({pending:Object.assign({},pending,{queue:queue,resolvedText:texts})});
+  var roleDef = role?ROLES[role]:null;
+  if(roleDef && roleDef.deathTrigger){
+    var used = roleAbilities(seatN).shotUsed;
+    var blockedByPoison = cause==='poison' && ((role==='hunter' && !rc().hunterCanShootIfPoisoned) || ((role==='wolfking'||role==='whitewolfking') && !rc().wolfKingCanShootIfPoisoned));
+    if(!used && !blockedByPoison){
+      await updateGame({pending:Object.assign({},pending,{queue:queue,resolvedText:texts,awaiting:{seat:seatN,role:role}})});
+      return;
+    }
+  }
+  return processPendingQueue();
+}
+function checkWin(){
+  var alive = aliveSeatList();
+  var wolfAlive=0, godAlive=0, villagerAlive=0, unknown=0;
+  alive.forEach(function(n){
+    var r=roleOfSeat(n);
+    if(!r){ unknown++; return; }
+    var f=ROLES[r].faction;
+    if(f==='wolf') wolfAlive++; else if(f==='good_god') godAlive++; else villagerAlive++;
+  });
+  if(unknown>0) return null; // 尚未登記完整，不判斷
+  if(wolfAlive===0) return 'good';
+  if(rc().factionWin==='city'){ if(godAlive===0 && villagerAlive===0) return 'wolf'; }
+  else { if(godAlive===0 || villagerAlive===0) return 'wolf'; }
+  return null;
+}
+function renderPendingResolution(){
+  var pending=state.game.pending;
+  if(pending.awaiting){
+    var seat=pending.awaiting.seat, role=pending.awaiting.role;
+    var alive=aliveSeatList().filter(function(n){return n!==seat;});
+    return '<div class="card stack"><h2>'+ROLES[role].name+'（'+seat+'號）死亡</h2><p class="muted small">是否開槍帶走一位玩家？</p>'
+      + '<div class="btngrid">'+alive.map(function(n){return '<button class="btn btn-sm" data-act="pending-shoot" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
+      + '<button class="btn btn-ghost btn-block" data-act="pending-shoot" data-n="0">不開槍</button></div>';
+  }
+  return '<div class="card"><p class="muted">結算處理中…</p></div>';
+}
+async function actPendingShoot(n){
+  var g=state.game; var pending=g.pending; var awaiting=pending.awaiting; var seat=awaiting.seat, role=awaiting.role;
+  await updateRole(seat,{abilities:Object.assign({},roleAbilities(seat),{shotUsed:true})});
+  var queue=pending.queue.slice();
+  if(n) queue.push({seat:n,cause:'shot'});
+  await updateGame({pending:Object.assign({},pending,{queue:queue,awaiting:null})});
+  await processPendingQueue();
+}
+
+/* ---- 白天引擎 ---- */
+function renderDayEngine(){
+  var ds = state.game.dayStage;
+  var html='';
+  if(ds==='sheriff_call'){
+    html += renderSheriffCall();
+  } else if(ds==='sheriff_speech'){
+    html += renderSpeakingOrderTool(true);
+  } else if(ds==='sheriff_vote'){
+    html += renderVoteRunner('sheriff');
+  } else if(ds==='speech_setup'){
+    html += renderSpeechSetup();
+  } else if(ds==='speech'){
+    html += renderSpeakingOrderTool(false);
+  } else if(ds==='lynch_vote'){
+    html += renderVoteRunner('lynch');
+  } else if(ds==='badge_transfer'){
+    html += renderBadgeTransfer();
+  }
+  html += renderDaySpecialActions();
+  return html;
+}
+function renderDaySpecialActions(){
+  if(state.game.pending || state.game.dayStage==='badge_transfer') return '';
+  var wwk = findAliveSeatWithRole('whitewolfking');
+  var knightSeat = findAliveSeatWithRole('knight');
+  var knightUsed = knightSeat ? !!roleAbilities(knightSeat).duelUsed : true;
+  if(!wwk && (!knightSeat || knightUsed)) return '';
+  var html='<div class="card stack"><h2>特殊技能</h2>';
+  if(wwk){
+    html += '<div class="row between"><span class="small muted">白狼王（'+wwk+'號）可自爆：立即死亡並開槍帶走一人，直接跳過剩餘白天流程進入夜晚。</span>'
+      + '<button class="btn btn-wolf btn-sm" data-act="wwk-detonate" data-n="'+wwk+'">自爆</button></div>';
+  }
+  if(knightSeat && !knightUsed){
+    if(ui.targetSel==='knight'){
+      var alive=aliveSeatList().filter(function(n){return n!==knightSeat;});
+      html += '<div class="stack"><span class="small muted">騎士（'+knightSeat+'號）指定決鬥對象：</span>'
+        + '<div class="btngrid">'+alive.map(function(n){return '<button class="btn btn-sm" data-act="knight-duel" data-k="'+knightSeat+'" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
+        + '<button class="btn btn-ghost btn-sm" data-act="knight-cancel">取消</button></div>';
+    } else {
+      html += '<div class="row between"><span class="small muted">騎士（'+knightSeat+'號）可發動決鬥，猜中狼人則對方死、猜錯則騎士死；每局限一次。</span>'
+        + '<button class="btn btn-sm" data-act="knight-start">決鬥</button></div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+async function actWhiteWolfDetonate(seat){
+  await startResolution([{seat:seat,cause:'detonate'}],'detonate');
+}
+async function actKnightDuel(knightSeat,targetSeat){
+  var targetRole = roleOfSeat(targetSeat);
+  var targetIsWolf = targetRole && ROLES[targetRole].faction==='wolf';
+  await updateRole(knightSeat,{abilities:Object.assign({},roleAbilities(knightSeat),{duelUsed:true})});
+  await startResolution([{seat: targetIsWolf?targetSeat:knightSeat, cause:'duel'}],'duel');
+}
+function renderSheriffCall(){
+  var alive=aliveSeatList();
+  var cands = (state.game.candidates)||[];
+  return '<div class="card stack"><h2>上警登記</h2><p class="muted small">點選要參選警長的座位（可複選）。</p>'
+    + '<div class="btngrid">'+alive.map(function(n){return '<button class="btn btn-sm'+(cands.indexOf(n)>=0?' btn-primary':'')+'" data-act="toggle-candidate" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
+    + '<button class="btn btn-primary btn-block" data-act="confirm-candidates" style="margin-top:10px;" '+(cands.length===0?'disabled':'')+'>競選名單確定（'+cands.length+' 人）</button>'
+    + '<button class="btn btn-ghost btn-block" data-act="skip-sheriff">本局不上警</button></div>';
+}
+async function actConfirmCandidates(){
+  var cands=state.game.candidates||[];
+  if(cands.length<2){ var order=genOrder(cands, 'asc', cands[0]); await updateGame({speakingOrder:order, dayStage:'sheriff_vote'}); return; }
+  var order = genOrder(cands, Math.random()<0.5?'asc':'desc', cands[Math.floor(Math.random()*cands.length)]);
+  await updateGame({speakingOrder:order, dayStage:'sheriff_speech'});
+}
+function genOrder(list, dir, start){
+  var arr=list.slice().sort(function(a,b){return a-b;});
+  var si=arr.indexOf(start); if(si<0) si=0;
+  var out=[];
+  for(var i=0;i<arr.length;i++){
+    var idx = dir==='asc' ? (si+i)%arr.length : ((si-i)%arr.length+arr.length)%arr.length;
+    out.push(arr[idx]);
+  }
+  return out;
+}
+function renderSpeakingOrderTool(isSheriff){
+  var order=state.game.speakingOrder||[];
+  return '<div class="card stack"><h2>發言順序</h2>'
+    + '<div class="row wrap">'+order.map(function(n,i){return '<span class="badge badge-brass">'+(i+1)+'. '+n+'號</span>';}).join('')+'</div>'
+    + '<p class="small muted">唸稿參考：請依序邀請以上玩家發言'+(isSheriff?'（參選宣言）':'')+'。</p>'
+    + '<button class="btn btn-primary btn-block" data-act="'+(isSheriff?'goto-sheriff-vote':'goto-lynch-vote')+'">發言結束，開始投票</button>'
+    + '</div>';
+}
+function renderSpeechSetup(){
+  var alive=aliveSeatList();
+  return '<div class="card stack"><h2>一般發言順序</h2>'
+    + '<div class="row wrap">'
+    + '<button class="btn btn-sm" data-act="gen-speech" data-dir="asc">順序（隨機起點）</button>'
+    + '<button class="btn btn-sm" data-act="gen-speech" data-dir="desc">逆序（隨機起點）</button>'
+    + '</div>'
+    + (state.game.speakingOrder&&state.game.speakingOrder.length?('<div class="row wrap" style="margin-top:8px;">'+state.game.speakingOrder.map(function(n,i){return '<span class="badge badge-brass">'+(i+1)+'. '+n+'號</span>';}).join('')+'</div>'):'')
+    + '<button class="btn btn-primary btn-block" data-act="confirm-speech" style="margin-top:10px;" '+(!(state.game.speakingOrder&&state.game.speakingOrder.length)?'disabled':'')+'>確定順序，進入發言</button>'
+    + '</div>';
+}
+async function actGenSpeech(dir){
+  var alive=aliveSeatList();
+  var start=alive[Math.floor(Math.random()*alive.length)];
+  var order=genOrder(alive,dir,start);
+  await updateGame({speakingOrder:order});
+}
+
+function renderVoteRunner(kind){
+  var voteId=state.game.activeVoteId;
+  if(!voteId){
+    return '<div class="card stack"><h2>'+(kind==='sheriff'?'警長選舉投票':'放逐投票')+'</h2>'
+      + '<button class="btn btn-primary btn-block" data-act="open-vote" data-kind="'+kind+'">開始投票</button></div>';
+  }
+  var v=state.votes[voteId];
+  if(!v) return '<div class="card"><p class="muted">投票建立中…</p></div>';
+  var html=renderVoteCardFull(v,true);
+  if(v.open){
+    html += '<div class="card"><button class="btn btn-wolf btn-block" data-act="close-vote">結束投票，準備歸票</button></div>';
+  } else if(!v.resolved){
+    html += renderSheriffDeclareStep(v, kind);
+  }
+  return html;
+}
+function renderVoteCardFull(v,godView){
+  var tally=tallyOf(v);
+  var candidates = v.candidates || aliveSeatList();
+  var maxT=Math.max(1, candidates.length?Math.max.apply(null,candidates.map(function(n){return tally[n]||0;})):1);
+  var html='<div class="card stack"><h2>'+esc(v.label)+'</h2>';
+  if(godView && v.sheriffSeat!=null){
+    html += '<label class="toggle-row"><span><span class="t-label">警長歸票（算 1.5 票）</span><br><span class="t-desc">警長（'+v.sheriffSeat+'號）口頭宣告投給誰後再勾選</span></span>'+toggleSwitch('sheriffDeclare:'+v.id, v.sheriffDeclared)+'</label>';
+  }
+  candidates.forEach(function(n){
+    var w=tally[n]||0; var pct=Math.round(w/maxT*100);
+    html += '<div class="vote-row"><div class="mono" style="text-align:right;">'+n+'</div>'
+      + '<div class="vote-bar-track"><div class="vote-bar-fill" style="width:'+pct+'%"></div><div class="vote-bar-label">'+fmtWeight(w)+' 票</div></div>'
+      + (!godView && v.open && ui.seat!=null && v.voters.indexOf(ui.seat)>=0 ? '<button class="btn btn-sm'+(v.choices&&v.choices[ui.seat]===n?' btn-wolf':'')+'" data-act="cast-vote" data-vid="'+v.id+'" data-target="'+n+'">投</button>' : '<span></span>')
+      + '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+function renderSheriffDeclareStep(v,kind){
+  var html='<div class="card stack"><h2>結果確認</h2><p class="muted small">「警長歸票」開關在上方票數卡片裡，確認無誤後再判定結果。</p>';
+  var tally=tallyOf(v);
+  var candidates=v.candidates||aliveSeatList();
+  var sorted=candidates.slice().sort(function(a,b){return (tally[b]||0)-(tally[a]||0);});
+  var top=tally[sorted[0]]||0;
+  var tied=sorted.filter(function(n){return (tally[n]||0)===top && top>0;});
+  if(tied.length>1){
+    html += '<p class="small" style="color:var(--accent-brass);">平票：'+tied.join('、')+' 號，請主持人依現場規則處理（重新發言投票 / 平安夜 / 上帝裁定）。</p>';
+    html += '<button class="btn btn-ghost btn-block" data-act="finish-vote" data-kind="'+kind+'" data-result="tie">記為平票，暫不出局</button>';
+  } else if(top>0){
+    html += '<p class="small">最高票：'+sorted[0]+' 號（'+fmtWeight(top)+' 票）。</p>';
+    html += '<button class="btn btn-wolf btn-block" data-act="finish-vote" data-kind="'+kind+'" data-result="'+sorted[0]+'">確認結果</button>';
+  } else {
+    html += '<p class="small muted">目前尚無票數。</p>';
+  }
+  html += '</div>';
+  return html;
+}
+async function actOpenVote(kind){
+  var candidates = kind==='sheriff' ? (state.game.candidates||[]) : aliveSeatList();
+  var voters = aliveSeatList().filter(function(n){ return !seatData(n).loseVoteRights; });
+  var id='round-'+Date.now();
+  await db.collection('votes').doc(id).set({id:id,kind:kind,label:kind==='sheriff'?'警長選舉投票':('第 '+state.game.dayNumber+' 天放逐投票'),candidates:candidates,voters:voters,sheriffSeat: kind==='lynch'?state.game.sheriffSeat:null, sheriffDeclared:false, choices:{}, open:true, resolved:false, createdAt:nowIso()});
+  await updateGame({activeVoteId:id});
+}
+async function actCloseVote(){
+  await db.collection('votes').doc(state.game.activeVoteId).update({open:false});
+}
+async function actFinishVote(kind,result){
+  var vid=state.game.activeVoteId;
+  await db.collection('votes').doc(vid).update({resolved:true});
+  if(result==='tie'){
+    if(kind==='sheriff'){ await updateGame({dayStage:'speech_setup', activeVoteId:null, candidates:[]}); }
+    else { await appendLog('第 '+state.game.dayNumber+' 天投票結果平票，本輪無人出局。'); await updateGame({dayStage:null, phase:'night', nightNumber:(state.game.nightNumber||0)+1, nightStepIndex:0, activeVoteId:null}); }
+    return;
+  }
+  var target=Number(result);
+  if(kind==='sheriff'){
+    await updateGame({sheriffSeat:target, activeVoteId:null, candidates:[], dayStage:'speech_setup'});
+    await appendLog(target+' 號當選警長。');
+  } else {
+    await updateGame({activeVoteId:null});
+    if(state.game.sheriffSeat===target){
+      await updateGame({dayStage:'badge_transfer'});
+    } else {
+      await startResolution([{seat:target,cause:'vote'}],'day-after-vote');
+      await updateGame({dayStage:null});
+    }
+  }
+}
+function renderBadgeTransfer(){
+  var sheriff=state.game.sheriffSeat;
+  if(rc().badgeTransferMode==='none'){
+    return '<div class="card stack"><h2>警徽作廢</h2><p class="muted small">警長（'+sheriff+'號）即將出局；本局設定為警徽不可轉移，直接撕毀。</p>'
+      + '<button class="btn btn-wolf btn-block" data-act="transfer-badge" data-n="0">確認撕毀警徽</button></div>';
+  }
+  var alive=aliveSeatList().filter(function(n){return n!==sheriff;});
+  return '<div class="card stack"><h2>警徽轉移</h2><p class="muted small">警長（'+sheriff+'號）即將出局，是否移交警徽給任一存活玩家？</p>'
+    + '<div class="btngrid">'+alive.map(function(n){return '<button class="btn btn-sm" data-act="transfer-badge" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
+    + '<button class="btn btn-ghost btn-block" data-act="transfer-badge" data-n="0">撕毀警徽</button></div>';
+}
+async function actTransferBadge(n){
+  var sheriff=state.game.sheriffSeat;
+  await updateGame({sheriffSeat:n||null});
+  await startResolution([{seat:sheriff,cause:'vote'}],'day-after-vote');
+  await updateGame({dayStage:null});
+}
+
+/* ============ Event 綁定 ============ */
+$app.addEventListener('click', function(e){
+  var el = e.target.closest('[data-act]');
+  if(!el) return;
+  var act=el.getAttribute('data-act');
+  handleAction(act, el);
+});
+$app.addEventListener('change', function(e){
+  var el=e.target;
+  if(el.matches('select[data-act="assign-role"]')){
+    var n=Number(el.getAttribute('data-n'));
+    updateRole(n,{role: el.value||null});
+  }
+  if(el.matches('select[data-act="select"]')){
+    var key=el.getAttribute('data-key');
+    if(ui.setupDraft){ ui.setupDraft.ruleConfig[key]=el.value; render(); }
+  }
+  if(el.matches('[data-act="pin-draft"]')){
+    if(ui.setupDraft){ ui.setupDraft.pin=el.value; }
+  }
+});
+
+function handleAction(act, el){
+  if(act==='home'){ ui.view='mode-select'; render(); return; }
+  if(act==='goto'){ ui.view=el.getAttribute('data-view'); render(); return; }
+  if(act==='pick-mode'){
+    var m=el.getAttribute('data-mode');
+    if(m==='full'||m==='pure'){ ui.mode=m; LS.set('ww_mode',m); ui.view='main'; render(); return; }
+    if(m==='__pure_god'){ ui.role='puregod'; render(); return; }
+    if(m==='__pure_player'){ ui.role='pureplayer'; render(); return; }
+    if(m==='__full_god'){ ui.role='fullgod'; render(); return; }
+    if(m==='__full_player'){ ui.role='fullplayer'; render(); return; }
+  }
+  if(act==='switch-identity'){ ui.role=null; render(); return; }
+
+  if(act==='pure-n'){
+    var d=Number(el.getAttribute('data-d'));
+    ui.setupDraft=ui.setupDraft||{}; ui.setupDraft.pureSeats=Math.max(2,Math.min(30,(ui.setupDraft.pureSeats||8)+d)); render(); return;
+  }
+  if(act==='pure-create'){
+    var n=Number(el.getAttribute('data-n'));
+    db.doc('pure/state').set({totalSeats:n, sheriffSeat:null, activeVoteId:null}); return;
+  }
+  if(act==='pure-claim'){
+    var n=Number(el.getAttribute('data-n'));
+    var nick=prompt('輸入暱稱（可留空）','')||'';
+    db.collection('pureSeats').doc(String(n)).acquire({holder:'seat',ttlMs:5000}).then(function(res){
+      if(!res.acquired){ alert('這個座位剛好有人在搶，請再點一次。'); return; }
+      db.collection('pureSeats').doc(String(n)).get().then(function(snap){
+        if(!snap.exists || !snap.data().occupied){
+          db.collection('pureSeats').doc(String(n)).set({seatNumber:n,occupied:true,nickname:nick});
+          ui.pureSeat=n; LS.set('ww_seat_pure',n); render();
+        } else { alert('這個座位已經有人了，請選其他座位。'); }
+      });
+    });
+    return;
+  }
+  if(act==='pure-set-sheriff'){
+    var n=Number(el.getAttribute('data-n'));
+    db.doc('pure/state').update({sheriffSeat: state.pure.sheriffSeat===n?null:n}); return;
+  }
+  if(act==='pure-reset'){
+    Object.keys(state.pureSeats).forEach(function(k){ db.collection('pureSeats').doc(k).delete(); });
+    db.doc('pure/state').set({totalSeats:0, sheriffSeat:null, activeVoteId:null});
+    ui.pureSeat=null; LS.set('ww_seat_pure',null); return;
+  }
+  if(act==='pure-start-vote'){
+    var label=($app.querySelector('#pureVoteLabel')||{}).value || '投票';
+    var eligible=rangeArr(1,pureTotalSeats()).filter(function(n){return pureSeatData(n).occupied;});
+    var id='pv-'+Date.now();
+    db.collection('pureVotes').doc(id).set({id:id,label:label,candidates:eligible,voters:eligible,sheriffSeat:state.pure.sheriffSeat,sheriffDeclared:false,choices:{},open:true,createdAt:nowIso()});
+    db.doc('pure/state').update({activeVoteId:id});
+    return;
+  }
+  if(act==='pure-vote'){
+    var target=Number(el.getAttribute('data-target'));
+    var vid=pureLatestVoteId();
+    if(ui.pureSeat==null){ alert('請先入座才能投票。'); return; }
+    var choices=Object.assign({}, state.pureVotes[vid].choices);
+    choices[ui.pureSeat]=target;
+    db.collection('pureVotes').doc(vid).update({choices:choices});
+    return;
+  }
+  if(act==='pure-close-vote'){
+    var vid=pureLatestVoteId();
+    db.collection('pureVotes').doc(vid).update({open:false});
+    return;
+  }
+
+  if(act==='pin-key'){
+    var k=el.getAttribute('data-k');
+    if(k==='⌫'){ ui.pinBuf=ui.pinBuf.slice(0,-1); }
+    else if(ui.pinBuf.length<4){ ui.pinBuf+=k; }
+    if(ui.pinBuf.length===4){
+      if(ui.pinBuf===state.game.godPin){ LS.set('ww_god_pin',ui.pinBuf); ui.pinBuf=''; render(); }
+      else { alert('PIN 錯誤'); ui.pinBuf=''; render(); }
+    } else render();
+    return;
+  }
+  if(act==='role-n'){
+    var r=el.getAttribute('data-r'); var d=Number(el.getAttribute('data-d'));
+    ui.setupDraft.roleConfig[r]=Math.max(0,(ui.setupDraft.roleConfig[r]||0)+d); render(); return;
+  }
+  if(act==='toggle'){
+    var key=el.getAttribute('data-key');
+    if(key.indexOf('rule:')===0){
+      var rk=key.slice(5); ui.setupDraft.ruleConfig[rk]=!ui.setupDraft.ruleConfig[rk]; render(); return;
+    }
+    if(key.indexOf('sheriffDeclare:')===0){
+      var vid=key.slice(15);
+      var v=state.votes[vid]||state.pureVotes[vid];
+      var coll = state.votes[vid] ? 'votes' : 'pureVotes';
+      db.collection(coll).doc(vid).update({sheriffDeclared: !v.sheriffDeclared});
+      return;
+    }
+  }
+  if(act==='create-game'){
+    var d=ui.setupDraft;
+    var total=0; ROLE_LIST.forEach(function(r){total+=d.roleConfig[r]||0;});
+    if(total<3){ alert('人數太少，至少需要 3 人。'); return; }
+    db.doc('game/state').set({
+      phase:'lobby', dayNumber:0, nightNumber:1, nightStepIndex:0,
+      roleConfig:d.roleConfig, ruleConfig:d.ruleConfig, totalSeats:total,
+      godPin:d.pin, sheriffSeat:null, candidates:[], speakingOrder:[], activeVoteId:null,
+      dayStage:null, winner:null, log:[{t:nowIso(),text:'上帝建立了新的一局，共 '+total+' 人。'}], pending:null
+    });
+    LS.set('ww_god_pin', d.pin);
+    ui.setupDraft=null; return;
+  }
+  if(act==='claim-seat'){
+    var n=Number(el.getAttribute('data-n'));
+    var nick=prompt('輸入暱稱（可留空）','')||'';
+    db.collection('seats').doc(String(n)).acquire({holder:'seat',ttlMs:5000}).then(function(res){
+      if(!res.acquired){ alert('這個座位剛好有人在搶，請再點一次。'); return; }
+      db.collection('seats').doc(String(n)).get().then(function(snap){
+        if(!snap.exists || !snap.data().occupied){
+          db.collection('seats').doc(String(n)).set({seatNumber:n,occupied:true,nickname:nick,alive:true});
+          ui.seat=n; LS.set('ww_seat_full',n); render();
+        } else { alert('這個座位已經有人了，請選其他座位。'); }
+      });
+    });
+    return;
+  }
+  if(act==='assign-role'){ return; }
+  if(act==='start-night1'){
+    db.doc('game/state').update({phase:'night'}); return;
+  }
+  if(act==='reset-game'){
+    if(!confirm('確定要重置整局嗎？所有座位、角色、投票紀錄都會清空。')) return;
+    Object.keys(state.seats).forEach(function(k){ db.collection('seats').doc(k).delete(); });
+    Object.keys(state.roles).forEach(function(k){ db.collection('roles').doc(k).delete(); });
+    Object.keys(state.nightlog).forEach(function(k){ db.collection('nightlog').doc(k).delete(); });
+    Object.keys(state.votes).forEach(function(k){ db.collection('votes').doc(k).delete(); });
+    db.doc('game/state').delete();
+    ui.seat=null; LS.set('ww_seat_full',null);
+    return;
+  }
+  if(act==='toggle-alive'){
+    var n=Number(el.getAttribute('data-n'));
+    updateSeat(n,{alive: !seatData(n).alive}); return;
+  }
+  if(act==='clear-seat'){
+    var n=Number(el.getAttribute('data-n'));
+    if(!confirm(n+' 號座位清空？')) return;
+    db.collection('seats').doc(String(n)).delete();
+    if(ui.seat===n){ ui.seat=null; LS.set('ww_seat_full',null); }
+    return;
+  }
+  if(act==='night-skip'){ nightAdvance(); return; }
+  if(act==='night-guard'){ actNightGuard(Number(el.getAttribute('data-n'))); return; }
+  if(act==='night-wolf'){ actNightWolf(Number(el.getAttribute('data-n'))); return; }
+  if(act==='night-charm'){ actNightCharm(Number(el.getAttribute('data-n'))); return; }
+  if(act==='night-witch-save'){ actWitchSave(Number(el.getAttribute('data-n'))); return; }
+  if(act==='night-witch-nosave'){ render(); return; }
+  if(act==='night-witch-poison'){ actWitchPoison(Number(el.getAttribute('data-n'))); return; }
+  if(act==='night-witch-done'){ nightAdvance(); return; }
+  if(act==='night-seer'){ actNightSeer(Number(el.getAttribute('data-n'))); return; }
+  if(act==='resolve-night'){ resolveNight(); return; }
+  if(act==='pending-shoot'){ actPendingShoot(Number(el.getAttribute('data-n'))); return; }
+
+  if(act==='toggle-candidate'){
+    var n=Number(el.getAttribute('data-n'));
+    var cands=(state.game.candidates||[]).slice();
+    var i=cands.indexOf(n);
+    if(i>=0) cands.splice(i,1); else cands.push(n);
+    updateGame({candidates:cands}); return;
+  }
+  if(act==='confirm-candidates'){ actConfirmCandidates(); return; }
+  if(act==='skip-sheriff'){ updateGame({dayStage:'speech_setup', sheriffSeat:null}); return; }
+  if(act==='goto-sheriff-vote'){ updateGame({dayStage:'sheriff_vote'}); return; }
+  if(act==='goto-lynch-vote'){ updateGame({dayStage:'lynch_vote'}); return; }
+  if(act==='gen-speech'){ actGenSpeech(el.getAttribute('data-dir')); return; }
+  if(act==='confirm-speech'){ updateGame({dayStage:'speech'}); return; }
+  if(act==='open-vote'){ actOpenVote(el.getAttribute('data-kind')); return; }
+  if(act==='close-vote'){ actCloseVote(); return; }
+  if(act==='cast-vote'){
+    var vid=el.getAttribute('data-vid'); var target=Number(el.getAttribute('data-target'));
+    if(ui.seat==null){ alert('請先入座才能投票。'); return; }
+    var v=state.votes[vid];
+    if(v.voters.indexOf(ui.seat)<0){ alert('這一輪投票你沒有投票資格。'); return; }
+    var choices=Object.assign({},v.choices); choices[ui.seat]=target;
+    db.collection('votes').doc(vid).update({choices:choices}); return;
+  }
+  if(act==='finish-vote'){ actFinishVote(el.getAttribute('data-kind'), el.getAttribute('data-result')); return; }
+  if(act==='transfer-badge'){ actTransferBadge(Number(el.getAttribute('data-n'))); return; }
+  if(act==='wwk-detonate'){
+    if(!confirm('確定自爆嗎？會立即死亡並跳過剩餘白天流程進入夜晚。')) return;
+    actWhiteWolfDetonate(Number(el.getAttribute('data-n'))); return;
+  }
+  if(act==='knight-start'){ ui.targetSel='knight'; render(); return; }
+  if(act==='knight-cancel'){ ui.targetSel=null; render(); return; }
+  if(act==='knight-duel'){
+    ui.targetSel=null;
+    actKnightDuel(Number(el.getAttribute('data-k')), Number(el.getAttribute('data-n')));
+    return;
+  }
+}
+
+})();
+</script>
