@@ -215,12 +215,11 @@ var firebaseConfig = {
   appId: "1:994497565410:web:1e176896f5334b326044bb"
 };
 
-/* ============ App Check（防止有人拿走上面的 firebaseConfig，自己寫腳本繞過網頁直接打資料庫）============
-   到 https://console.firebase.google.com 該專案的「專案設定 → App Check」，註冊這個 Web App、
-   驗證提供者選「reCAPTCHA v3」，把拿到的 Site Key 貼到下面取代 YOUR_RECAPTCHA_SITE_KEY，
-   接著在同一頁把 Firestore（跟有開匿名登入的話也含 Authentication）的「強制執行 / Enforce」打開，
-   這一步才是真的擋掉未授權流量的關鍵，只填 Site Key 沒開 Enforce 不會生效。
-   還沒設定之前保持 YOUR_RECAPTCHA_SITE_KEY 不動，App 會照常運作，只是還沒有這層防護。 */
+/* ============ App Check（評估過，目前決定不裝，詳見 README「App Check」一節）============
+   骨架先留著、保持 YOUR_RECAPTCHA_SITE_KEY 不動即可，App 會照常運作。
+   原因：現在申請 reCAPTCHA 只剩 Enterprise，要掛 GCP 帳單帳戶，會讓這個 Firebase 專案
+   從「Spark 免費方案（超額只會擋請求，不會收費）」變成「Blaze 隨用隨付（超額真的會收費）」，
+   對朋友聚會用的小專案來說代價大於實際被打爆配額的機率，所以先不做。 */
 var appCheckSiteKey = "YOUR_RECAPTCHA_SITE_KEY";
 
 /* ============ 角色登錄表 ============ */

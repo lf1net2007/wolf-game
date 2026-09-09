@@ -16,16 +16,13 @@
 6. 複製出現的 `firebaseConfig` 物件，貼到 `index.html` 最上面取代裡面的 `YOUR_API_KEY` 等範例值。
 7. 存檔、`git commit`、`git push`，GitHub Pages 會自動更新。
 
-## 建議加設：App Check（擋外部腳本直接打資料庫，防免費額度被榨乾）
+## App Check（評估過，目前決定不裝）
 
-`firebaseConfig` 會出現在公開的 repo 裡是正常的（不是密鑰外洩），但因為 Firestore 規則只檢查「有沒有登入」，任何人只要拿到這組設定值，就能不透過你的網頁、自己寫腳本狂打資料庫，把免費配額用光或亂寫壞資料。加上 App Check 可以擋掉這種不是從你的網頁載入的請求：
+`firebaseConfig` 出現在公開 repo 裡是正常的（不是密鑰外洩），理論上有人拿到這組設定值可以不透過網頁、自己寫腳本直接打資料庫。App Check 可以擋掉這種流量，`index.html` 裡已經留了 `appCheckSiteKey` 的骨架、`YOUR_RECAPTCHA_SITE_KEY` 是保持未啟用的預留值。
 
-1. Firebase 主控台左側「專案設定（齒輪）→ App Check」，點選你的 Web App，驗證提供者選「reCAPTCHA v3」（免費），照指示註冊拿到一組 Site Key。
-2. 把 Site Key 貼到 `index.html` 裡取代 `YOUR_RECAPTCHA_SITE_KEY`。
-3. 回到 App Check 頁面，把 **Firestore** 的「強制執行 / Enforce」打開（有開匿名登入的話，Authentication 也一起開）——這一步才是真的生效的關鍵，只填 Site Key 沒開 Enforce 不會擋任何東西。
-4. 存檔、`git commit`、`git push`。
+**目前決定先不裝**：申請 reCAPTCHA 時 Google 主控台只提供「reCAPTCHA Enterprise」，需要幫這個 GCP 專案掛上帳單帳戶（信用卡）；一旦掛卡，Firebase 專案很可能會從 Spark（免費方案，超額只會擋掉請求、絕不收費）變成 Blaze（隨用隨付），連 Firestore 本身超過免費額度都會變成真的收費，而不是現在這種「壞掉但不花錢」的保底狀態。對這種朋友聚會用的小專案，這個代價大於被陌生人打爆配額的實際機率，所以先維持 Spark 方案、不裝 App Check。
 
-沒設定之前 `appCheckSiteKey` 保持預設值，App 會照常運作，只是少了這層防護，可以之後再補。
+如果之後想法改變（例如連結真的被分享出去、需要更強的防護），可以重新評估這個取捨。
 
 ## 部署到 GitHub Pages
 
