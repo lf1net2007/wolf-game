@@ -706,6 +706,9 @@ function renderPublicBoard(){
 function renderDayPublicPanels(){
   var html='';
   var ds = state.game.dayStage;
+  if(state.game.lastWordsQueue && state.game.lastWordsQueue.length){
+    return '<div class="card"><p class="muted small">遺言時間，請留意上帝口頭指示。</p></div>';
+  }
   if(ds==='sheriff_call'){
     html += '<div class="card"><p class="muted small">上帝正在詢問是否有人要上警，請留意上帝口頭指示與舉手時機。</p></div>';
   }
@@ -749,6 +752,8 @@ function renderGodConsole(){
   var html='';
   if(state.game.winner){ html += renderWinBanner() + '<div class="card"><button class="btn btn-primary btn-block" data-act="reset-game" data-confirm="確定要開始新的一局嗎？這一局的紀錄都會清空。">開始新的一局</button></div>'; return html + renderGodBottomTools(); }
   if(state.game.pending){ html += renderPendingResolution(); return html; }
+  if(state.game.lastWordsQueue && state.game.lastWordsQueue.length){ return renderGodSeatStrip() + renderLastWords(); }
+  if(ui.pickSeatRole!=null){ return renderGodSeatStrip() + renderPickRoleForSeat(ui.pickSeatRole); }
   html += renderGodSeatStrip();
   if(state.game.phase==='night'){ html += renderNightEngine(); }
   if(state.game.phase==='day'){ html += renderDayEngine(); }
@@ -771,22 +776,34 @@ function renderGodBottomTools(){
   if(remaining.length){
     html += '<p class="small muted">還沒標記完的角色：'+remaining.map(function(r){return ROLES[r].name+'('+(assignedByRole[r]||0)+'/'+roleConfigCounts()[r]+')';}).join('、')+'</p>';
   }
-  seatNums().forEach(function(n){
+  html += '<p class="small muted">點一個座位可以標記/修改身份、標記死亡或清空座位。</p>';
+  html += '<div class="seat-grid">' + seatNums().map(function(n){
     var s=seatData(n); var role=roleOfSeat(n);
-    html += '<div class="row between small" style="flex-wrap:wrap;">'
-      + '<span class="mono">'+n+'</span>'
-      + '<span class="muted" style="flex:1;min-width:70px;">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+(!s.alive?' · <b style="color:var(--accent-wolf);">已死亡</b>':'')+'</span>'
-      + '<select data-act="assign-role" data-n="'+n+'" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-sunken);color:var(--text);">'
-      + '<option value="">未標記</option>'
-      + roleOptionsFor(role).map(function(r){return '<option value="'+r+'"'+(role===r?' selected':'')+'>'+ROLES[r].name+'</option>';}).join('')
-      + '</select>'
-      + '<button class="btn btn-sm" data-act="toggle-alive" data-n="'+n+'">'+(s.alive?'標記死亡':'復活')+'</button>'
-      + '<button class="btn btn-sm btn-ghost" data-act="clear-seat" data-n="'+n+'">清空</button>'
-      + '</div>';
-  });
+    var cls='seat'+(!s.occupied?' empty':'')+(s.occupied&&!s.alive?' dead':'');
+    var roleTag = role ? ('<div class="small" style="margin-top:2px;">'+ROLES[role].name+'</div>') : '';
+    return '<div class="'+cls+'" '+(s.occupied?'data-act="pick-role-for-seat" data-n="'+n+'"':'')+'>'
+      + '<div class="num mono">'+n+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div>'+roleTag+'</div>';
+  }).join('') + '</div>';
   html += '<button class="btn btn-ghost btn-block" data-act="reset-game" style="margin-top:6px;" data-confirm="確定要重置整局嗎？所有座位、角色、投票紀錄都會清空。">重置整局</button>';
   html += '</div>';
   html += '<div class="card stack"><h2>上帝紀錄簿（僅上帝看得到）</h2>' + renderGodOnlyLog() + '</div>';
+  return html;
+}
+/* 點座位跳出的「標記身份」畫面：取代原本條列+下拉選單的做法，改成點按鈕，
+   同一頁也能直接標記存活/死亡、或清空整個座位。 */
+function renderPickRoleForSeat(n){
+  var s=seatData(n); var role=roleOfSeat(n);
+  var options=roleOptionsFor(role);
+  var html='<div class="card stack"><h2>標記身份：'+n+' 號'+(s.occupied?'（'+esc(s.nickname||'已入座')+'）':'')+'</h2>'
+    + '<p class="muted small">目前身份：'+(role?ROLES[role].name:'未標記')+'　·　狀態：'+(s.alive?'存活':'<b style="color:var(--accent-wolf);">已死亡</b>')+'</p>'
+    + '<div class="btngrid">'
+    + options.map(function(r){return '<button class="btn btn-sm'+(role===r?' btn-wolf':'')+'" data-act="set-seat-role" data-n="'+n+'" data-r="'+r+'">'+ROLES[r].name+'</button>';}).join('')
+    + '</div>'
+    + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="set-seat-role" data-n="'+n+'" data-r="">清除身份標記（改回未標記）</button>'
+    + '<button class="btn '+(s.alive?'btn-wolf':'btn-good')+' btn-block" style="margin-top:8px;" data-act="toggle-alive" data-n="'+n+'">標記為'+(s.alive?'已死亡':'存活')+'</button>'
+    + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="clear-seat" data-n="'+n+'" data-confirm="確定要清空 '+n+' 號座位嗎？這個座位會變回空位，玩家要重新入座。">清空這個座位</button>'
+    + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="close-pick-role">取消，返回</button>'
+    + '</div>';
   return html;
 }
 function renderGodOnlyLog(){
@@ -806,7 +823,7 @@ async function ensureNightlog(){
   var key=currentNightlogKey();
   if(!state.nightlog[key]){ await db.collection('nightlog').doc(key).set({night:state.game.nightNumber}); }
 }
-function activeNightGroups(){ return nightGroupOrder(rc()); }
+function activeNightGroups(){ return nightGroupOrder(rc()).filter(groupExistsInConfig); }
 
 function roleMaybeAlive(r){
   var need = roleConfigCounts()[r]||0;
@@ -847,8 +864,12 @@ function renderNightEngine(){
   var backBtn = idx>0 ? '<button class="btn btn-ghost btn-block" data-act="night-back" data-confirm="確定要回到上一位角色重新處理嗎？上一位角色這一晚做的選擇會被清空，可以重新選一次。">← 上一步（回到上一位角色重新處理）</button>' : '';
 
   if(idx>=groups.length){
-    html += '<div class="card stack"><h2>夜晚結束</h2><p class="muted">所有睜眼流程已完成，可以天亮公布死訊。</p>'
-      + '<button class="btn btn-primary btn-block" data-act="resolve-night">天亮了，公布結果</button></div>'
+    var willCallSheriff = (state.game.dayNumber||0)===0 && rc().sheriffEnabled;
+    html += '<div class="card stack"><h2>夜晚結束</h2><p class="muted">'
+      + (willCallSheriff ? '所有睜眼流程已完成，天亮了——請先讓想競選警長的玩家起立報名，登記完才會正式公布昨晚的死訊。' : '所有睜眼流程已完成，可以天亮公布死訊。')
+      + '</p><button class="btn btn-primary btn-block" data-act="resolve-night">'
+      + (willCallSheriff ? '天亮了，請競選警長的玩家起立' : '天亮了，公布結果')
+      + '</button></div>'
       + backBtn;
     return html;
   }
@@ -868,6 +889,11 @@ function renderNightEngine(){
       + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>'
       + backBtn;
     return html;
+  }
+  if(group==='witch'){
+    var witchNl=currentNightlog();
+    var witchStage1Done = !!witchNl.antidoteDeclined || !!witchNl.antidoteTarget;
+    if(witchStage1Done){ backBtn=''; } // 階段二有自己的「上一步」按鈕，不能再用這顆跳去上一位角色
   }
   html += renderNightGroupAction(group) + backBtn;
   return html;
@@ -958,6 +984,7 @@ function renderNightGroupAction(group){
           + '<button class="btn btn-ghost btn-block" data-act="night-witch-nopoison" style="margin-top:8px;">不使用毒藥</button>';
       }
       html += '</div>';
+      html += '<button class="btn btn-ghost btn-block" data-act="night-witch-back-antidote" style="margin-top:10px;">← 上一步（回到解藥階段重新選）</button>';
       return html;
     }
 
@@ -988,18 +1015,20 @@ function renderNightGroupAction(group){
     var hseat=findAliveSeatWithRole('hunter');
     var deaths=computeNightDeaths();
     var dying=deaths.find(function(d){return d.seat===hseat;});
-    var big, note;
+    var gesture, guide;
     if(!dying){
-      big='獵人平安無事';
-      note='請比出「沒事」的手勢（例如搖頭），讓獵人安心閉眼，不用開口說明。';
+      gesture='比出「沒事」的手勢（例如搖頭）';
+      guide='獵人平安無事，讓他安心閉眼即可。';
     } else if(dying.cause==='poison' && !rc().hunterCanShootIfPoisoned){
-      big='獵人今晚會死亡，且是中毒身亡';
-      note='請比出「不能開槍」的手勢（例如比叉），不要開口說明原因。';
+      gesture='比出「不能開槍」的手勢（例如比叉）';
+      guide='獵人今晚是中毒身亡，依規則不能開槍。';
     } else {
-      big='獵人今晚會死亡，但仍可以開槍';
-      note='請比出「可以開槍」的手勢（例如比手槍動作），不要開口說明原因；實際要開槍打誰，等明天公布死訊時再詢問。';
+      gesture='比出「可以開槍」的手勢（例如比手槍動作）';
+      guide='獵人今晚會死亡但不是中毒身亡，仍可以開槍；實際要開槍打誰，等明天公布死訊、確認他出局後再問。';
     }
-    return '<div class="gesture"><div class="big">'+big+'</div><p class="small">'+note+'</p>'
+    return '<div class="gesture"><div class="big">你今晚的開槍手勢是...</div>'
+      + '<p class="small">請'+gesture+'，不要開口說明原因；獵人要到明天上帝公布死訊時才會知道自己是否出局。</p>'
+      + '<p class="small muted" style="margin-top:6px;">📖 上帝內部參考（不用唸出來）：請告知獵人是否可以開槍——'+guide+'</p>'
       + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
   }
   return '';
@@ -1078,6 +1107,14 @@ async function actWitchDeclineAntidote(){
   await ensureNightlog();
   await db.collection('nightlog').doc(currentNightlogKey()).update({antidoteDeclined:true});
 }
+async function actWitchBackToAntidote(){
+  // 女巫「階段二・毒藥」自己的上一步：只復原解藥階段做的選擇，不動全局的 nightStepIndex，
+  // 也不影響毒藥階段（此時毒藥階段本來就還沒做過選擇）。
+  var wseat=findAliveSeatWithRole('witch');
+  var nl=currentNightlog();
+  if(nl.antidoteTarget && wseat){ await updateRole(wseat,{abilities:Object.assign({},roleAbilities(wseat),{antidoteUsed:false})}); }
+  await db.collection('nightlog').doc(currentNightlogKey()).update({antidoteTarget:null, antidoteDeclined:null});
+}
 async function actWitchPoison(n){
   var wseat=findAliveSeatWithRole('witch');
   await db.collection('nightlog').doc(currentNightlogKey()).update({poisonTarget:n});
@@ -1129,8 +1166,8 @@ async function resolveNight(){
   var suppressReveal = (state.game.dayNumber||0)===0;
   await startResolution(deaths,'night',suppressReveal);
 }
-async function startResolution(deaths,context,suppressReveal){
-  await updateGame({ pending:{ queue:deaths, awaiting:null, context:context, resolvedText:[], suppressReveal: !!suppressReveal } });
+async function startResolution(deaths,context,suppressReveal,meta){
+  await updateGame({ pending:{ queue:deaths, awaiting:null, context:context, resolvedText:[], suppressReveal: !!suppressReveal, meta: meta||null } });
   await processPendingQueue();
 }
 async function processPendingQueue(){
@@ -1159,7 +1196,15 @@ async function processPendingQueue(){
     if(winner){ await updateGame({winner:winner}); return; }
     if(context==='night'){
       await updateGame({phase:'day', dayNumber:(state.game.dayNumber||0)+1, dayStage:'lynch_vote'});
-    } else if(context==='detonate' || context==='day-after-vote'){
+    } else if(context==='day-after-vote'){
+      // 放逐投票出局的玩家有遺言，插一段遺言關卡，講完才進下一夜
+      var votedSeat = pending.meta && pending.meta.votedSeat;
+      if(votedSeat!=null){
+        await updateGame({lastWordsQueue:[votedSeat], lastWordsNext:'__advance_night__'});
+      } else {
+        await updateGame({phase:'night', nightNumber:(state.game.nightNumber||0)+1, nightStepIndex:0, dayStage:null});
+      }
+    } else if(context==='detonate'){
       await updateGame({phase:'night', nightNumber:(state.game.nightNumber||0)+1, nightStepIndex:0, dayStage:null});
     }
     return;
@@ -1323,14 +1368,36 @@ function renderRevealStage(){
 async function actRevealDeaths(){
   var texts = state.game.pendingRevealTexts||[];
   for(var i=0;i<texts.length;i++){ await appendLog(texts[i]); }
-  var jobs=[];
+  var jobs=[]; var newlyDead=[];
   seatNums().forEach(function(n){
     var s=seatData(n);
-    if(s.alive===false && s.revealed===false){ jobs.push(updateSeat(n,{revealed:true})); }
+    if(s.alive===false && s.revealed===false){ jobs.push(updateSeat(n,{revealed:true})); newlyDead.push(n); }
   });
   await Promise.all(jobs);
   var next = state.game.afterReveal || 'lynch_vote';
-  await updateGame({pendingRevealTexts:[], dayStage:next, afterReveal:null});
+  if(newlyDead.length){
+    // 只有第一夜死亡的玩家有遺言（其餘夜裡死的都沒有）；這裡揭曉的一定是第一夜死訊，逐一走一輪遺言
+    newlyDead.sort(function(a,b){return a-b;});
+    await updateGame({pendingRevealTexts:[], afterReveal:null, lastWordsQueue:newlyDead, lastWordsNext:next});
+  } else {
+    await updateGame({pendingRevealTexts:[], dayStage:next, afterReveal:null});
+  }
+}
+function renderLastWords(){
+  var seat=(state.game.lastWordsQueue||[])[0];
+  return '<div class="card stack"><h2>🎤 遺言</h2><p class="muted small">請 '+seat+' 號玩家發表遺言，結束後再按下方繼續。</p>'
+    + '<button class="btn btn-primary btn-block" data-act="last-words-next">遺言結束，繼續</button></div>';
+}
+async function actLastWordsNext(){
+  var q=(state.game.lastWordsQueue||[]).slice();
+  q.shift();
+  if(q.length){ await updateGame({lastWordsQueue:q}); return; }
+  var next = state.game.lastWordsNext;
+  if(next==='__advance_night__'){
+    await updateGame({lastWordsQueue:[], lastWordsNext:null, phase:'night', nightNumber:(state.game.nightNumber||0)+1, nightStepIndex:0, dayStage:null});
+  } else {
+    await updateGame({lastWordsQueue:[], lastWordsNext:null, dayStage: next||'lynch_vote'});
+  }
 }
 function renderDaySpecialActions(){
   if(state.game.pending) return '';
@@ -1373,26 +1440,42 @@ async function actKnightDuel(knightSeat,targetSeat){
   await startResolution([{seat: targetIsWolf?targetSeat:knightSeat, cause:'duel'}],'duel');
 }
 function renderSheriffCall(){
-  var alive=aliveSeatList();
+  // 死訊還沒公布，昨晚可能已經死亡的玩家自己還不知道，一樣可以報名參選——所以這裡列全部有入座的座位，不能只列存活的
+  var eligible=seatNums().filter(function(n){ return seatData(n).occupied; });
   var cands = (state.game.candidates)||[];
-  return '<div class="card stack"><h2>上警登記</h2><p class="muted small">點選要參選警長的座位（可複選）。</p>'
-    + '<div class="btngrid">'+alive.map(function(n){return '<button class="btn btn-sm'+(cands.indexOf(n)>=0?' btn-primary':'')+'" data-act="toggle-candidate" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
+  return '<div class="card stack"><h2>上警登記</h2><p class="muted small">點選要參選警長的座位（可複選；死訊還沒公布前，昨晚可能已經死亡的玩家一樣能報名參選）。</p>'
+    + '<div class="btngrid">'+eligible.map(function(n){return '<button class="btn btn-sm'+(cands.indexOf(n)>=0?' btn-primary':'')+'" data-act="toggle-candidate" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
     + '<button class="btn btn-primary btn-block" data-act="confirm-candidates" style="margin-top:10px;" '+(cands.length===0?'disabled':'')+'>競選名單確定（'+cands.length+' 人）</button>'
     + '<button class="btn btn-ghost btn-block" data-act="skip-sheriff">本局不上警</button></div>';
 }
-async function actConfirmCandidates(){
-  var cands=state.game.candidates||[];
-  if(cands.length<2){
-    var order=genOrder(cands, 'asc', cands[0]);
-    await updateGame({speakingOrder:order, dayStage:'reveal', afterReveal:'sheriff_vote'});
-    return;
-  }
-  var order = genOrder(cands, Math.random()<0.5?'asc':'desc', cands[Math.floor(Math.random()*cands.length)]);
-  await updateGame({speakingOrder:order, dayStage:'reveal', afterReveal:'sheriff_speech'});
+function randomSeatAndDir(){
+  var total=state.game.totalSeats||seatNums().length;
+  return { start: 1+Math.floor(Math.random()*total), dir: Math.random()<0.5?'asc':'desc' };
 }
+async function actConfirmCandidates(){
+  // 第一夜死訊要等競選警長「整個流程」結束才公布，所以這裡直接進發言/投票，
+  // 不能像原本一樣先跳去公布死訊——afterReveal 保留原本從夜晚結算帶過來的值（'lynch_vote'），
+  // 等選完警長那一刻才會真正用到。
+  var cands=state.game.candidates||[];
+  var rsd=randomSeatAndDir();
+  var order = genOrder(cands, rsd.dir, rsd.start);
+  var nextStage = cands.length<2 ? 'sheriff_vote' : 'sheriff_speech';
+  await updateGame({speakingOrder:order, dayStage:nextStage});
+}
+/* 依「從 start 號開始，往 dir 方向繞座位」的真實現場規則排出 list（候選人）裡的發言順序。
+   start 不一定是候選人本人（現實中就是隨口報一個座位當起點），所以要從 start 開始沿方向找
+   第一個真的在候選名單裡的座位，當作真正的排序起點，再依序繞完一圈。 */
 function genOrder(list, dir, start){
   var arr=list.slice().sort(function(a,b){return a-b;});
-  var si=arr.indexOf(start); if(si<0) si=0;
+  if(!arr.length) return [];
+  var total=state.game.totalSeats||Math.max.apply(null,arr);
+  var si=-1;
+  for(var step=0; step<total; step++){
+    var probe = dir==='asc' ? (((start-1+step)%total)+1) : ((((start-1-step)%total)+total)%total+1);
+    var pos=arr.indexOf(probe);
+    if(pos>=0){ si=pos; break; }
+  }
+  if(si<0) si=0;
   var out=[];
   for(var i=0;i<arr.length;i++){
     var idx = dir==='asc' ? (si+i)%arr.length : ((si-i)%arr.length+arr.length)%arr.length;
@@ -1464,7 +1547,10 @@ function renderSheriffDeclareStep(v,kind){
   var sorted=candidates.slice().sort(function(a,b){return (tally[b]||0)-(tally[a]||0);});
   var top=tally[sorted[0]]||0;
   var tied=sorted.filter(function(n){return (tally[n]||0)===top && top>0;});
-  if(tied.length>1){
+  if(tied.length>1 && kind==='sheriff'){
+    html += '<p class="small" style="color:var(--accent-brass);">平票：'+tied.join('、')+' 號，將進入複選——只有平票的人重新發言，其餘存活玩家（不含平票候選人）重新投票。</p>';
+    html += '<button class="btn btn-wolf btn-block" data-act="finish-vote" data-kind="sheriff" data-result="tie">進入複選</button>';
+  } else if(tied.length>1){
     html += '<p class="small" style="color:var(--accent-brass);">平票：'+tied.join('、')+' 號，請主持人依現場規則處理（重新發言投票 / 平安夜 / 上帝裁定）。</p>';
     html += '<button class="btn btn-ghost btn-block" data-act="finish-vote" data-kind="'+kind+'" data-result="tie">記為平票，暫不出局</button>';
   } else if(top>0){
@@ -1479,7 +1565,11 @@ function renderSheriffDeclareStep(v,kind){
 }
 async function actOpenVote(kind){
   var candidates = kind==='sheriff' ? (state.game.candidates||[]) : aliveSeatList();
-  var voters = aliveSeatList().filter(function(n){ return !seatData(n).loseVoteRights; });
+  var voters = aliveSeatList().filter(function(n){
+    if(seatData(n).loseVoteRights) return false;
+    if(kind==='sheriff' && candidates.indexOf(n)>=0) return false; // 上警競選的人這輪不能投票
+    return true;
+  });
   var id='round-'+Date.now();
   await db.collection('votes').doc(id).set({id:id,kind:kind,label:kind==='sheriff'?'警長選舉投票':('第 '+state.game.dayNumber+' 天放逐投票'),candidates:candidates,voters:voters,sheriffSeat: kind==='lynch'?state.game.sheriffSeat:null, sheriffDeclared:true, choices:{}, open:true, resolved:false, createdAt:nowIso()});
   await updateGame({activeVoteId:id});
@@ -1489,19 +1579,41 @@ async function actCloseVote(){
 }
 async function actFinishVote(kind,result){
   var vid=state.game.activeVoteId;
+  var v=state.votes[vid];
   await db.collection('votes').doc(vid).update({resolved:true});
   if(result==='tie'){
-    if(kind==='sheriff'){ await updateGame({dayStage:'lynch_vote', activeVoteId:null, candidates:[]}); }
+    if(kind==='sheriff'){
+      // 平票進複選：候選名單縮小成只剩平票的人，重新抽一次隨機起點/順逆序發言，其餘存活玩家（不含這些候選人）重新投票
+      var tally=tallyOf(v);
+      var cands=v.candidates||[];
+      var top=cands.length?Math.max.apply(null,cands.map(function(n){return tally[n]||0;})):0;
+      var tied=cands.filter(function(n){return (tally[n]||0)===top;});
+      var rsd=randomSeatAndDir();
+      var order=genOrder(tied, rsd.dir, rsd.start);
+      await appendLog('警長選舉平票（'+tied.join('、')+' 號），進入複選。');
+      await updateGame({candidates:tied, speakingOrder:order, dayStage:'sheriff_speech', activeVoteId:null});
+    }
     else { await appendLog('第 '+state.game.dayNumber+' 天投票結果平票，本輪無人出局。'); await updateGame({dayStage:null, phase:'night', nightNumber:(state.game.nightNumber||0)+1, nightStepIndex:0, activeVoteId:null}); }
     return;
   }
   var target=Number(result);
   if(kind==='sheriff'){
-    await updateGame({sheriffSeat:target, activeVoteId:null, candidates:[], dayStage:'lynch_vote'});
-    await appendLog(target+' 號當選警長。');
+    // 警長選舉整個流程（含複選）跑完，這時候才正式進入公布死訊（第一夜死訊在這之前都是保密的）
+    await appendLog(target+' 號當選警長。'); // 選舉結果本身不用保密，這一刻大家本來就看得到票數
+    if(!seatData(target).alive){
+      // 當選的候選人其實已經死亡（只是死訊還沒公布）：警徽比照「警長死亡」統一處理，
+      // 立刻問要轉移給誰還是撕毀，不能讓死人掛著警徽；「已死亡」這件事本身跟著其他死訊一起公布。
+      await updateGame({
+        sheriffSeat:target, activeVoteId:null, candidates:[], dayStage:'reveal',
+        pendingRevealTexts:(state.game.pendingRevealTexts||[]).concat([target+' 號警長其實已經死亡，警徽將轉移或作廢。']),
+        pending:{ queue:[], awaiting:{seat:target,badgeTransfer:true}, context:'sheriff-dead-elect', resolvedText:[], suppressReveal:false }
+      });
+    } else {
+      await updateGame({sheriffSeat:target, activeVoteId:null, candidates:[], dayStage:'reveal'});
+    }
   } else {
     await updateGame({activeVoteId:null});
-    await startResolution([{seat:target,cause:'vote'}],'day-after-vote');
+    await startResolution([{seat:target,cause:'vote'}],'day-after-vote', false, {votedSeat:target});
     await updateGame({dayStage:null});
   }
 }
@@ -1520,10 +1632,6 @@ $app.addEventListener('click', function(e){
 });
 $app.addEventListener('change', function(e){
   var el=e.target;
-  if(el.matches('select[data-act="assign-role"]')){
-    var n=Number(el.getAttribute('data-n'));
-    updateRole(n,{role: el.value||null});
-  }
   if(el.matches('select[data-act="select"]')){
     var key=el.getAttribute('data-key');
     if(ui.setupDraft){ ui.setupDraft.ruleConfig[key]=el.value; render(); }
@@ -1656,7 +1764,6 @@ function handleAction(act, el){
     });
     return;
   }
-  if(act==='assign-role'){ return; }
   if(act==='start-night1'){
     db.doc('game/state').update({phase:'night'}); return;
   }
@@ -1684,9 +1791,18 @@ function handleAction(act, el){
   }
   if(act==='clear-seat'){
     var n=Number(el.getAttribute('data-n'));
-    if(!confirm(n+' 號座位清空？')) return;
     db.collection('seats').doc(String(n)).delete();
     if(ui.seat===n){ ui.seat=null; LS.set('ww_seat_full',null); }
+    ui.pickSeatRole=null; render();
+    return;
+  }
+  if(act==='pick-role-for-seat'){ ui.pickSeatRole=Number(el.getAttribute('data-n')); render(); return; }
+  if(act==='close-pick-role'){ ui.pickSeatRole=null; render(); return; }
+  if(act==='set-seat-role'){
+    var n=Number(el.getAttribute('data-n'));
+    var r=el.getAttribute('data-r')||null;
+    updateRole(n,{role:r});
+    ui.pickSeatRole=null; render();
     return;
   }
   if(act==='night-skip'){ nightAdvance(); return; }
@@ -1713,9 +1829,11 @@ function handleAction(act, el){
   if(act==='confirm-candidates'){ actConfirmCandidates(); return; }
   if(act==='skip-sheriff'){ updateGame({dayStage:'reveal', afterReveal:'lynch_vote', sheriffSeat:null}); return; }
   if(act==='reveal-deaths'){ actRevealDeaths(); return; }
+  if(act==='last-words-next'){ actLastWordsNext(); return; }
   if(act==='assign-seer-target-role'){ actAssignSeerTargetRole(Number(el.getAttribute('data-n')), el.getAttribute('data-r')); return; }
   if(act==='night-witch-nosave'){ actWitchDeclineAntidote(); return; }
   if(act==='night-witch-nopoison'){ actWitchDeclinePoison(); return; }
+  if(act==='night-witch-back-antidote'){ actWitchBackToAntidote(); return; }
   if(act==='goto-sheriff-vote'){ updateGame({dayStage:'sheriff_vote'}); return; }
   if(act==='open-vote'){ actOpenVote(el.getAttribute('data-kind')); return; }
   if(act==='close-vote'){ actCloseVote(); return; }
