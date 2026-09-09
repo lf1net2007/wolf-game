@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check-compat.js"></script>
 <style>
   :root{
     --bg:#fff1c9; --bg-elevated:#ffffff; --bg-sunken:#ffe39b;
@@ -214,6 +215,14 @@ var firebaseConfig = {
   appId: "1:994497565410:web:1e176896f5334b326044bb"
 };
 
+/* ============ App Check（防止有人拿走上面的 firebaseConfig，自己寫腳本繞過網頁直接打資料庫）============
+   到 https://console.firebase.google.com 該專案的「專案設定 → App Check」，註冊這個 Web App、
+   驗證提供者選「reCAPTCHA v3」，把拿到的 Site Key 貼到下面取代 YOUR_RECAPTCHA_SITE_KEY，
+   接著在同一頁把 Firestore（跟有開匿名登入的話也含 Authentication）的「強制執行 / Enforce」打開，
+   這一步才是真的擋掉未授權流量的關鍵，只填 Site Key 沒開 Enforce 不會生效。
+   還沒設定之前保持 YOUR_RECAPTCHA_SITE_KEY 不動，App 會照常運作，只是還沒有這層防護。 */
+var appCheckSiteKey = "YOUR_RECAPTCHA_SITE_KEY";
+
 /* ============ 角色登錄表 ============ */
 var ROLES = {
   villager:{id:'villager',name:'平民',faction:'good_villager',night:false,desc:'無特殊能力。'},
@@ -272,6 +281,10 @@ async function boot(){
   try{
     if(!firebaseConfig.apiKey || firebaseConfig.apiKey==='YOUR_API_KEY'){ dbStatus='unavailable'; render(); return; }
     firebase.initializeApp(firebaseConfig);
+    if(appCheckSiteKey && appCheckSiteKey!=='YOUR_RECAPTCHA_SITE_KEY'){
+      try{ firebase.appCheck().activate(appCheckSiteKey, true); }
+      catch(e){ /* App Check 設定有誤也不要卡住整個 App 啟動 */ }
+    }
     await firebase.auth().signInAnonymously();
     db = firebase.firestore();
   }catch(e){ db=null; dbStatus='unavailable'; render(); return; }
@@ -541,12 +554,21 @@ function renderGodFlow(){
     return renderSetupWizard();
   }
   if(!godUnlocked()){
+    if(ui.forgotPinOpen){ return renderForgotPinConfirm(); }
     return renderPinGate();
   }
   if(state.game.phase==='lobby'){
     return renderLobbyGod();
   }
   return renderGodConsole();
+}
+var FORGOT_PIN_PHRASE = '確定重置整局';
+function renderForgotPinConfirm(){
+  return '<div class="card stack"><h2>確認重置整個場次</h2>'
+    + '<p class="muted small">這一局的座位、身份、夜晚紀錄、投票全部會被清空，且無法復原。為了避免手滑或別人亂按，請在下方完全輸入「'+FORGOT_PIN_PHRASE+'」六個字才能送出。</p>'
+    + '<div class="field"><input type="text" id="forgotPinText" placeholder="請輸入：'+FORGOT_PIN_PHRASE+'"></div>'
+    + '<div class="row"><button class="btn btn-wolf btn-block" data-act="forgot-pin-confirm">確認重置</button>'
+    + '<button class="btn btn-ghost btn-block" data-act="forgot-pin-cancel">取消，回去輸入 PIN</button></div></div>';
 }
 function renderPinGate(){
   var buf=ui.pinBuf||'';
@@ -559,7 +581,7 @@ function renderPinGate(){
         return '<button data-act="pin-key" data-k="'+k+'">'+k+'</button>';
       }).join('')+'</div>'
     + '<p class="small muted" style="text-align:center;margin-top:10px;">忘記 PIN 了嗎？</p>'
-    + '<button class="btn btn-ghost btn-block" data-act="reset-game" data-confirm="忘記 PIN 只能重置整個場次重新開始，目前這一局的座位、身份、進度都會清空，確定要這樣做嗎？">忘記 PIN，重置整個場次重新開始</button>'
+    + '<button class="btn btn-ghost btn-block" data-act="forgot-pin-open">忘記 PIN，重置整個場次重新開始</button>'
     + '</div>';
 }
 
@@ -1638,6 +1660,15 @@ function handleAction(act, el){
   if(act==='assign-role'){ return; }
   if(act==='start-night1'){
     db.doc('game/state').update({phase:'night'}); return;
+  }
+  if(act==='forgot-pin-open'){ ui.forgotPinOpen=true; render(); return; }
+  if(act==='forgot-pin-cancel'){ ui.forgotPinOpen=false; render(); return; }
+  if(act==='forgot-pin-confirm'){
+    var typed = (($app.querySelector('#forgotPinText')||{}).value || '').trim();
+    if(typed!==FORGOT_PIN_PHRASE){ alert('文字沒有完全輸入正確，沒有重置。'); return; }
+    ui.forgotPinOpen=false;
+    handleAction('reset-game', el);
+    return;
   }
   if(act==='reset-game'){
     Object.keys(state.seats).forEach(function(k){ db.collection('seats').doc(k).delete(); });

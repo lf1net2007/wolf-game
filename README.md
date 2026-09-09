@@ -16,6 +16,17 @@
 6. 複製出現的 `firebaseConfig` 物件，貼到 `index.html` 最上面取代裡面的 `YOUR_API_KEY` 等範例值。
 7. 存檔、`git commit`、`git push`，GitHub Pages 會自動更新。
 
+## 建議加設：App Check（擋外部腳本直接打資料庫，防免費額度被榨乾）
+
+`firebaseConfig` 會出現在公開的 repo 裡是正常的（不是密鑰外洩），但因為 Firestore 規則只檢查「有沒有登入」，任何人只要拿到這組設定值，就能不透過你的網頁、自己寫腳本狂打資料庫，把免費配額用光或亂寫壞資料。加上 App Check 可以擋掉這種不是從你的網頁載入的請求：
+
+1. Firebase 主控台左側「專案設定（齒輪）→ App Check」，點選你的 Web App，驗證提供者選「reCAPTCHA v3」（免費），照指示註冊拿到一組 Site Key。
+2. 把 Site Key 貼到 `index.html` 裡取代 `YOUR_RECAPTCHA_SITE_KEY`。
+3. 回到 App Check 頁面，把 **Firestore** 的「強制執行 / Enforce」打開（有開匿名登入的話，Authentication 也一起開）——這一步才是真的生效的關鍵，只填 Site Key 沒開 Enforce 不會擋任何東西。
+4. 存檔、`git commit`、`git push`。
+
+沒設定之前 `appCheckSiteKey` 保持預設值，App 會照常運作，只是少了這層防護，可以之後再補。
+
 ## 部署到 GitHub Pages
 
 Repo 設定裡打開 Settings → Pages，Source 選這個分支的根目錄，存檔後幾分鐘內會有一個 `https://<帳號>.github.io/<repo>/` 的連結，把這個連結分享給所有人（上帝跟玩家都用同一個連結）。
