@@ -12,6 +12,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check-compat.js"></script>
 <style>
+  /* --font-mono 原本是 'Bangers'（跟標題同一套裝飾字體），拿來排座位號碼／票數這種
+     一定要讓上帝在快節奏中準確辨識的數字時，數字造型太花俏容易看錯（曾被回報「7 號看
+     成 1 號」），改成跟內文一樣的 Noto Sans TC，犧牲一點裝飾感換清楚易讀。 */
   :root{
     --bg:#fff1c9; --bg-elevated:#ffffff; --bg-sunken:#ffe39b;
     --text:#241b3a; --text-muted:#7a6a9c; --border:#241b3a;
@@ -20,7 +23,7 @@
     --accent-brass:#ffb100; --accent-brass-soft:rgba(255,177,0,.22);
     --accent-good:#1fa971; --accent-good-soft:rgba(31,169,113,.18);
     --accent-focus:#6c5ce7; --accent-focus-soft:rgba(108,92,231,.16);
-    --font-display:'Bangers',cursive; --font-body:'Noto Sans TC',sans-serif; --font-mono:'Bangers','Noto Sans TC',cursive;
+    --font-display:'Bangers',cursive; --font-body:'Noto Sans TC',sans-serif; --font-mono:'Noto Sans TC',sans-serif;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -102,7 +105,21 @@
   .seat .nick{font-size:11px;color:var(--text-muted);margin-top:3px;height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .seat.empty{border-style:dashed;color:var(--text-muted);box-shadow:none;}
   .seat.tagged{background:var(--accent-good-soft);}
-  .seat.dead{opacity:.75;border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);background:var(--accent-wolf-soft);}
+  /* 座位管理：標記身份後依角色分色，比單一綠色更好辨識是哪個角色（守衛藍／女巫亮紅／
+     預言家紫／獵人黃／狼人深紅／平民黃，其餘角色還沒指定顏色、維持上面的 .tagged 綠色）。
+     宣告順序要放在 .tagged 之後、.dead 之前，才能蓋過綠色，又會被死亡狀態蓋過去。 */
+  .seat[class*="role-"]{color:#fff;}
+  .seat[class*="role-"] .nick{color:rgba(255,255,255,.85);}
+  .seat.role-hunter,.seat.role-villager{color:#241b3a;}
+  .seat.role-hunter .nick,.seat.role-villager .nick{color:rgba(36,27,58,.7);}
+  .seat.role-guard{background:#2f6fed;}
+  .seat.role-witch{background:#ff2740;}
+  .seat.role-seer{background:#8b5cf6;}
+  .seat.role-hunter{background:#f5d90a;}
+  .seat.role-wolf{background:#7a0d0d;}
+  .seat.role-villager{background:#f5d90a;}
+  .seat.dead{opacity:.75;border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);background:var(--accent-wolf-soft);color:var(--text);}
+  .seat.dead .nick{color:var(--text-muted);}
   .seat.dead::after{
     content:'OUT'; position:absolute; left:0; right:0; top:38%; padding:2px 0; overflow:hidden;
     font-family:var(--font-mono); font-size:14px; color:#fff; background:var(--accent-wolf);
@@ -237,6 +254,9 @@ var ROLES = {
 var ROLE_LIST=['villager','wolf','wolfking','whitewolfking','wolfbeauty','seer','witch','hunter','guard','idiot','knight'];
 var FACTION_LABEL={wolf:'狼人陣營',good_god:'好人陣營・神職',good_villager:'好人陣營・平民'};
 var FACTION_BADGE={wolf:'badge-wolf',good_god:'badge-good',good_villager:'badge-muted'};
+// 座位管理標記身份後依角色分色（使用者指定：守衛藍／女巫亮紅／預言家紫／獵人黃／狼人深紅／平民黃）；
+// 其餘角色（狼王/白狼王/狼美人/白痴/騎士）還沒指定顏色，先不列在這裡，維持原本的綠色 .tagged。
+var ROLE_SEAT_COLOR_CLASS={guard:'role-guard',witch:'role-witch',seer:'role-seer',hunter:'role-hunter',wolf:'role-wolf',villager:'role-villager'};
 
 function nightGroupOrder(rc){
   // 特殊狼（狼王/白狼王/狼美人）如果在場，先在「wolfspecial」這一步把身份標記清楚，
@@ -801,12 +821,13 @@ function renderGodBottomTools(){
   if(remaining.length){
     html += '<p class="small muted">還沒標記完的角色：'+remaining.map(function(r){return ROLES[r].name+'('+(assignedByRole[r]||0)+'/'+roleConfigCounts()[r]+')';}).join('、')+'</p>';
   }
-  html += '<p class="small muted">每一個座位都可以點選，跳出視窗可以標記/修改身份、改暱稱、標記存活死亡、手動入座或清空座位——已經標記身份的座位會變成綠色，方便一眼看出還有誰沒登記；當選警長的座位會有小皇冠標示。</p>';
+  html += '<p class="small muted">每一個座位都可以點選，跳出視窗可以標記/修改身份、改暱稱、標記存活死亡或清空座位——已經標記身份的座位會依角色分色（守衛藍／女巫亮紅／預言家紫／獵人黃／狼人深紅／平民黃，其餘角色暫時維持綠色），一眼就能看出誰還沒登記；當選警長的座位會有小皇冠標示。</p>';
   html += '<div class="seat-grid">' + seatNums().map(function(n){
     var s=seatData(n); var role=roleOfSeat(n);
-    var tagged = !!(s.occupied && role);
-    var cls='seat'+(!s.occupied?' empty':'')+(s.occupied&&!s.alive?' dead':'')+(tagged?' tagged':'')+(state.game.sheriffSeat===n?' sheriff':'');
-    var roleTag = role ? ('<div class="small" style="margin-top:2px;">'+ROLES[role].name+'</div>') : (s.occupied?'<div class="small muted" style="margin-top:2px;">未標記</div>':'');
+    var tagged = !!role; // 不看 occupied：不開手機也可能已經被標記身份（例如自動填平民）
+    var roleColorClass = role && ROLE_SEAT_COLOR_CLASS[role] ? (' '+ROLE_SEAT_COLOR_CLASS[role]) : '';
+    var cls='seat'+(!s.occupied?' empty':'')+(s.occupied&&!s.alive?' dead':'')+(tagged?' tagged':'')+roleColorClass+(state.game.sheriffSeat===n?' sheriff':'');
+    var roleTag = role ? ('<div class="small" style="margin-top:2px;">'+ROLES[role].name+'</div>') : '<div class="small muted" style="margin-top:2px;">未標記</div>';
     return '<div class="'+cls+'" data-act="pick-role-for-seat" data-n="'+n+'">'
       + '<div class="num mono">'+n+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div>'+roleTag+'</div>';
   }).join('') + '</div>';
@@ -993,6 +1014,13 @@ function pickIdentifyUI(roleId, wakeLine){
   return '<div class="card stack"><h2>'+wakeLine+'</h2><p class="muted small">標記身份：'+ROLES[roleId].name+'——請看誰睜眼／示意，點出是哪一位座位。</p>'
     + '<div class="btngrid">'+candidates.map(function(n){return '<button class="btn btn-sm" data-act="assign-role-quick" data-r="'+roleId+'" data-n="'+n+'">'+n+'</button>';}).join('')+'</div></div>';
 }
+// 特殊狼每一種都有自己不一樣的導讀（不是共用一句），標記身份當下只是單純起立示意，
+// 還不涉及選誰、所以不用像「狼人」那樣接「今晚要擊殺的對象是...」。
+var WOLF_SPECIAL_WAKE_LINE = {
+  wolfking: '狼王現身請睜眼',
+  whitewolfking: '白狼王現身請睜眼',
+  wolfbeauty: '狼美人現身請睜眼'
+};
 function renderNightGroupAction(group){
   var alive = aliveSeatList();
   if(group==='guard'){
@@ -1010,7 +1038,7 @@ function renderNightGroupAction(group){
     // 標記完才輪到「狼人」這一步；沿用跟守衛/女巫一樣的 pickIdentifyUI。
     var specialRoles = ['wolfking','whitewolfking','wolfbeauty'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
     for(var si=0; si<specialRoles.length; si++){
-      var pickS = pickIdentifyUI(specialRoles[si], '狼人現身請睜眼，今晚要擊殺的對象是...');
+      var pickS = pickIdentifyUI(specialRoles[si], WOLF_SPECIAL_WAKE_LINE[specialRoles[si]]);
       if(pickS) return pickS;
     }
     return '<div class="card stack"><h2>特殊狼身份已確認</h2>'
@@ -1787,8 +1815,9 @@ async function actFinishVote(kind,result){
         pending:{ queue:[], awaiting:{seat:target,badgeTransfer:true}, context:'sheriff-dead-elect', resolvedText:[], suppressReveal:false }
       });
     } else {
-      // 警長當選且還活著：先讓警長決定發言順序，才進公布死訊。
-      await updateGame({sheriffSeat:target, activeVoteId:null, candidates:[], dayStage:'sheriff_order', dayStagePrev:'sheriff_vote'});
+      // 警長當選且還活著：先公布昨晚死訊（或平安夜），公布完才輪到警長決定發言順序——
+      // 不是反過來先決定順序才公布。afterReveal 原本是 'lynch_vote'，這裡改指向 sheriff_order。
+      await updateGame({sheriffSeat:target, activeVoteId:null, candidates:[], dayStage:'reveal', dayStagePrev:'sheriff_vote', afterReveal:'sheriff_order'});
     }
   } else {
     await updateGame({activeVoteId:null});
@@ -2047,7 +2076,7 @@ function handleAction(act, el){
   if(act==='night-witch-back-antidote'){ actWitchBackToAntidote(); return; }
   if(act==='night-gate-start'){ updateGame({nightStepIndex:0}); return; }
   if(act==='goto-sheriff-vote'){ actGotoSheriffVote(); return; }
-  if(act==='sheriff-order-done'){ updateGame({dayStage:'reveal', dayStagePrev:'sheriff_order'}); return; }
+  if(act==='sheriff-order-done'){ updateGame({dayStage:'lynch_vote', dayStagePrev:null}); return; }
   if(act==='day-back'){ actDayBack(); return; }
   if(act==='cancel-vote'){ actCancelVote(); return; }
   if(act==='open-vote'){ actOpenVote(el.getAttribute('data-kind')); return; }
