@@ -242,15 +242,19 @@ var FACTION_LABEL={wolf:'狼人陣營',good_god:'好人陣營・神職',good_vil
 var FACTION_BADGE={wolf:'badge-wolf',good_god:'badge-good',good_villager:'badge-muted'};
 
 function nightGroupOrder(rc){
-  // 狼美人跟狼人一起睜眼決定殺人目標後，狼人陣營先閉眼，換狼美人單獨睜眼選魅惑對象，
-  // 所以在流程上要排成自己獨立的一步，緊接在「狼人」之後。
-  var front = rc.guardBeforeWolf!==false ? ['guard','wolf','wolfbeauty'] : ['wolf','wolfbeauty','guard'];
+  // 特殊狼（狼王/白狼王/狼美人）如果在場，先在「wolfspecial」這一步把身份標記清楚，
+  // 標記完才輪到「wolf」這一步——這一步只單獨標記普通狼人，然後才是全體狼人陣營
+  // 共同決定殺人目標。狼美人跟狼人一起睜眼決定殺人目標後，狼人陣營先閉眼，
+  // 換狼美人單獨睜眼選魅惑對象，所以她的「行動」還是排在自己獨立的一步，緊接在「狼人」之後，
+  // 只有「標記身份」的部分提前到 wolfspecial。
+  var wolfBlock = ['wolfspecial','wolf','wolfbeauty'];
+  var front = rc.guardBeforeWolf!==false ? ['guard'].concat(wolfBlock) : wolfBlock.concat(['guard']);
   // 獵人需要知道當晚（狼刀/守衛/女巫）的結果才能告知能不能開槍，所以排在女巫之後；
   // 預言家一律排在最後才睜眼（不受此規則開關影響）。
   var mid = rc.witchBeforeSeer!==false ? ['witch','hunter'] : ['hunter','witch'];
   return front.concat(mid).concat(['seer']);
 }
-var NIGHT_GROUP_LABEL={guard:'守衛',wolf:'狼人',wolfbeauty:'狼美人',witch:'女巫',seer:'預言家',hunter:'獵人'};
+var NIGHT_GROUP_LABEL={guard:'守衛',wolfspecial:'特殊狼',wolf:'狼人',wolfbeauty:'狼美人',witch:'女巫',seer:'預言家',hunter:'獵人'};
 
 /* ============ localStorage ============ */
 var LS={
@@ -853,6 +857,7 @@ function groupHasAliveRole(group){
   if(group==='seer') return roleMaybeAlive('seer');
   if(group==='hunter') return roleMaybeAlive('hunter');
   if(group==='wolfbeauty') return roleMaybeAlive('wolfbeauty');
+  if(group==='wolfspecial') return ['wolfking','whitewolfking','wolfbeauty'].some(roleMaybeAlive);
   if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(roleMaybeAlive);
   return false;
 }
@@ -862,6 +867,7 @@ function groupExistsInConfig(group){
   if(group==='seer') return (roleConfigCounts().seer||0)>0;
   if(group==='hunter') return (roleConfigCounts().hunter||0)>0;
   if(group==='wolfbeauty') return (roleConfigCounts().wolfbeauty||0)>0;
+  if(group==='wolfspecial') return ['wolfking','whitewolfking','wolfbeauty'].some(function(r){return (roleConfigCounts()[r]||0)>0;});
   if(group==='wolf') return ['wolf','wolfking','whitewolfking'].some(function(r){return (roleConfigCounts()[r]||0)>0;});
   return false;
 }
@@ -955,14 +961,23 @@ function renderNightGroupAction(group){
       + '<div class="btngrid">' + options.map(function(n){return '<button class="btn btn-sm" data-act="night-guard" data-n="'+n+'" data-confirm="確定守衛守護 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
       + '<button class="btn btn-ghost btn-block" data-act="night-guard" data-n="0">今晚不守護任何人</button></div>';
   }
-  if(group==='wolf'){
-    // 狼人（含狼王/白狼王）睜眼時要先讓上帝逐一標記清楚是哪幾個座位，
-    // 標記完才進入「全體共同決定殺誰」的畫面——沿用跟守衛/女巫一樣的 pickIdentifyUI。
-    var wolfRoles = ['wolf','wolfking','whitewolfking'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
-    for(var wi=0; wi<wolfRoles.length; wi++){
-      var pickW = pickIdentifyUI(wolfRoles[wi], ROLES[wolfRoles[wi]].name);
-      if(pickW) return pickW;
+  if(group==='wolfspecial'){
+    // 特殊狼（狼王/白狼王/狼美人）如果在場，先在這一步逐一標記清楚是哪幾個座位，
+    // 標記完才輪到「狼人」這一步；沿用跟守衛/女巫一樣的 pickIdentifyUI。
+    var specialRoles = ['wolfking','whitewolfking','wolfbeauty'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
+    for(var si=0; si<specialRoles.length; si++){
+      var pickS = pickIdentifyUI(specialRoles[si], ROLES[specialRoles[si]].name);
+      if(pickS) return pickS;
     }
+    return '<div class="gesture"><div class="big">特殊狼身份已確認</div>'
+      + '<p class="small">本局的'+specialRoles.map(function(r){return ROLES[r].name;}).join('、')+'身份都已標記完成，接著請狼人一起睜眼。</p>'
+      + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+  }
+  if(group==='wolf'){
+    // 普通狼人睜眼時標記清楚是哪幾個座位（狼王/白狼王已經在「特殊狼」那一步標記過了），
+    // 標記完才進入「全體共同決定殺誰」的畫面——沿用跟守衛/女巫一樣的 pickIdentifyUI。
+    var pickW = pickIdentifyUI('wolf', ROLES.wolf.name);
+    if(pickW) return pickW;
     var wolfVariants = ['wolfking','whitewolfking'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
     var variantNote = wolfVariants.length ? ('本局狼人陣營還包含：'+wolfVariants.map(function(r){return ROLES[r].name;}).join('、')+'，能力是死亡/白天才觸發，等時機到了系統會提示。') : '';
     return '<div class="card stack"><h2>請狼人睜眼</h2><p class="muted small">全體狼人共同決定今晚擊殺目標。</p>'
@@ -1126,7 +1141,7 @@ async function actNightBack(){
   } else if(prevGroup==='seer'){
     await db.collection('nightlog').doc(currentNightlogKey()).update({seerTarget:null, seerResult:null, seerPendingTarget:null});
   }
-  // 獵人步驟純提示、不寫資料，不用清
+  // 獵人、特殊狼（wolfspecial）這兩步純提示/純標記身份、不寫夜間選擇資料，不用清
   await updateGame({nightStepIndex: idx-1});
 }
 async function actNightWolf(n){
