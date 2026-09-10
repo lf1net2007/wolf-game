@@ -1487,8 +1487,9 @@ async function actKnightDuel(knightSeat,targetSeat){
   await startResolution([{seat: targetIsWolf?targetSeat:knightSeat, cause:'duel'}],'duel');
 }
 function renderSheriffCall(){
-  // 死訊還沒公布，昨晚可能已經死亡的玩家自己還不知道，一樣可以報名參選——所以這裡列全部有入座的座位，不能只列存活的
-  var eligible=seatNums().filter(function(n){ return seatData(n).occupied; });
+  // 列出本局全部座位號碼，不能只列 occupied（有開手機入座）的——上帝本來就要能在玩家沒開手機時
+  // 直接口頭代為操作，而且死訊還沒公布時，昨晚可能已經死亡的玩家自己還不知道，一樣可以報名參選。
+  var eligible=seatNums();
   var cands = (state.game.candidates)||[];
   return '<div class="card stack"><h2>上警登記</h2><p class="muted small">點選要參選警長的座位（可複選；死訊還沒公布前，昨晚可能已經死亡的玩家一樣能報名參選）。</p>'
     + '<div class="btngrid">'+eligible.map(function(n){return '<button class="btn btn-sm'+(cands.indexOf(n)>=0?' btn-primary':'')+'" data-act="toggle-candidate" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
