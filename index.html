@@ -101,6 +101,7 @@
   .seat .num{font-family:var(--font-mono);font-weight:700;font-size:24px;line-height:1;}
   .seat .nick{font-size:11px;color:var(--text-muted);margin-top:3px;height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .seat.empty{border-style:dashed;color:var(--text-muted);box-shadow:none;}
+  .seat.tagged{background:var(--accent-good-soft);}
   .seat.dead{opacity:.75;border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);background:var(--accent-wolf-soft);}
   .seat.dead::after{
     content:'OUT'; position:absolute; left:0; right:0; top:38%; padding:2px 0; overflow:hidden;
@@ -244,9 +245,10 @@ function nightGroupOrder(rc){
   // 狼美人跟狼人一起睜眼決定殺人目標後，狼人陣營先閉眼，換狼美人單獨睜眼選魅惑對象，
   // 所以在流程上要排成自己獨立的一步，緊接在「狼人」之後。
   var front = rc.guardBeforeWolf!==false ? ['guard','wolf','wolfbeauty'] : ['wolf','wolfbeauty','guard'];
-  var back = rc.witchBeforeSeer!==false ? ['witch','seer'] : ['seer','witch'];
-  // 獵人放在最後：需要知道整晚（狼刀/守衛/女巫）的結果，才能告知能不能開槍
-  return front.concat(back).concat(['hunter']);
+  // 獵人需要知道當晚（狼刀/守衛/女巫）的結果才能告知能不能開槍，所以排在女巫之後；
+  // 預言家一律排在最後才睜眼（不受此規則開關影響）。
+  var mid = rc.witchBeforeSeer!==false ? ['witch','hunter'] : ['hunter','witch'];
+  return front.concat(mid).concat(['seer']);
 }
 var NIGHT_GROUP_LABEL={guard:'守衛',wolf:'狼人',wolfbeauty:'狼美人',witch:'女巫',seer:'預言家',hunter:'獵人'};
 
@@ -620,7 +622,7 @@ function renderSetupWizard(){
 
   html += '<div class="card"><details><summary>規則細節（點開調整進階規則）</summary><div class="stack" style="margin-top:10px;">';
   html += toggleRow('guardBeforeWolf', d.ruleConfig.guardBeforeWolf, '守衛先於狼人睜眼', '關閉則狼人先手');
-  html += toggleRow('witchBeforeSeer', d.ruleConfig.witchBeforeSeer, '女巫先於預言家睜眼', '關閉則預言家先手');
+  html += toggleRow('witchBeforeSeer', d.ruleConfig.witchBeforeSeer, '女巫先於獵人睜眼', '關閉則獵人先手（預言家一律最後睜眼）');
   html += toggleRow('witchSelfSaveFirstNight', d.ruleConfig.witchSelfSaveFirstNight, '女巫首夜可自救', '之後每晚一律不可自救');
   html += toggleRow('witchBothPotionsSameNight', d.ruleConfig.witchBothPotionsSameNight, '女巫可同一晚解藥毒藥並用', '關閉則兩種藥同晚只能擇一');
   html += toggleRow('guardWitchOverlapKills', d.ruleConfig.guardWitchOverlapKills, '同守同救仍會死亡', '啟用「合刀」規則（預設開啟）');
@@ -776,12 +778,13 @@ function renderGodBottomTools(){
   if(remaining.length){
     html += '<p class="small muted">還沒標記完的角色：'+remaining.map(function(r){return ROLES[r].name+'('+(assignedByRole[r]||0)+'/'+roleConfigCounts()[r]+')';}).join('、')+'</p>';
   }
-  html += '<p class="small muted">點一個座位可以標記/修改身份、標記死亡或清空座位。</p>';
+  html += '<p class="small muted">每一個座位都可以點選，跳出視窗可以標記/修改身份、改暱稱、標記存活死亡、手動入座或清空座位——已經標記身份的座位會變成綠色，方便一眼看出還有誰沒登記。</p>';
   html += '<div class="seat-grid">' + seatNums().map(function(n){
     var s=seatData(n); var role=roleOfSeat(n);
-    var cls='seat'+(!s.occupied?' empty':'')+(s.occupied&&!s.alive?' dead':'');
-    var roleTag = role ? ('<div class="small" style="margin-top:2px;">'+ROLES[role].name+'</div>') : '';
-    return '<div class="'+cls+'" '+(s.occupied?'data-act="pick-role-for-seat" data-n="'+n+'"':'')+'>'
+    var tagged = !!(s.occupied && role);
+    var cls='seat'+(!s.occupied?' empty':'')+(s.occupied&&!s.alive?' dead':'')+(tagged?' tagged':'');
+    var roleTag = role ? ('<div class="small" style="margin-top:2px;">'+ROLES[role].name+'</div>') : (s.occupied?'<div class="small muted" style="margin-top:2px;">未標記</div>':'');
+    return '<div class="'+cls+'" data-act="pick-role-for-seat" data-n="'+n+'">'
       + '<div class="num mono">'+n+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div>'+roleTag+'</div>';
   }).join('') + '</div>';
   html += '<button class="btn btn-ghost btn-block" data-act="reset-game" style="margin-top:6px;" data-confirm="確定要重置整局嗎？所有座位、角色、投票紀錄都會清空。">重置整局</button>';
@@ -789,13 +792,17 @@ function renderGodBottomTools(){
   html += '<div class="card stack"><h2>上帝紀錄簿（僅上帝看得到）</h2>' + renderGodOnlyLog() + '</div>';
   return html;
 }
-/* 點座位跳出的「標記身份」畫面：取代原本條列+下拉選單的做法，改成點按鈕，
-   同一頁也能直接標記存活/死亡、或清空整個座位。 */
+/* 點座位跳出的「座位管理」彈出視窗：取代原本條列+下拉選單的做法，改成點按鈕，
+   同一頁也能直接改暱稱、標記存活/死亡、或清空整個座位；空位則改顯示手動入座的表單。 */
 function renderPickRoleForSeat(n){
-  var s=seatData(n); var role=roleOfSeat(n);
+  var s=seatData(n);
+  if(!s.occupied) return renderPickEmptySeat(n);
+  var role=roleOfSeat(n);
   var options=roleOptionsFor(role);
-  var html='<div class="card stack"><h2>標記身份：'+n+' 號'+(s.occupied?'（'+esc(s.nickname||'已入座')+'）':'')+'</h2>'
+  var html='<div class="card stack"><h2>座位管理：'+n+' 號</h2>'
     + '<p class="muted small">目前身份：'+(role?ROLES[role].name:'未標記')+'　·　狀態：'+(s.alive?'存活':'<b style="color:var(--accent-wolf);">已死亡</b>')+'</p>'
+    + '<div class="field"><label>暱稱</label><div class="row"><input type="text" id="editSeatNick" value="'+esc(s.nickname||'')+'" placeholder="暱稱" style="flex:1;"><button class="btn btn-sm" data-act="update-seat-nick" data-n="'+n+'">更新</button></div></div>'
+    + '<div class="eyebrow" style="margin-top:4px;">標記身份</div>'
     + '<div class="btngrid">'
     + options.map(function(r){return '<button class="btn btn-sm'+(role===r?' btn-wolf':'')+'" data-act="set-seat-role" data-n="'+n+'" data-r="'+r+'">'+ROLES[r].name+'</button>';}).join('')
     + '</div>'
@@ -805,6 +812,14 @@ function renderPickRoleForSeat(n){
     + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="close-pick-role">取消，返回</button>'
     + '</div>';
   return html;
+}
+function renderPickEmptySeat(n){
+  return '<div class="card stack"><h2>'+n+' 號目前是空位</h2>'
+    + '<p class="muted small">如果這位玩家沒有打開手機入座（或入座打錯座位），可以在這裡幫他手動登記，避免流程卡住。</p>'
+    + '<div class="field"><label>暱稱（可留空）</label><input type="text" id="manualSeatNick" placeholder="暱稱"></div>'
+    + '<button class="btn btn-primary btn-block" data-act="manual-claim-seat" data-n="'+n+'">手動入座</button>'
+    + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="close-pick-role">取消，返回</button>'
+    + '</div>';
 }
 function renderGodOnlyLog(){
   var items=[];
@@ -895,6 +910,10 @@ function renderNightEngine(){
     var witchStage1Done = !!witchNl.antidoteDeclined || !!witchNl.antidoteTarget;
     if(witchStage1Done){ backBtn=''; } // 階段二有自己的「上一步」按鈕，不能再用這顆跳去上一位角色
   }
+  if(group==='seer'){
+    var seerNl=currentNightlog();
+    if(seerNl.seerTarget || seerNl.seerPendingTarget){ backBtn=''; } // 預言家自己選完/待補身份後也有專屬的「上一步」，不能再用這顆跳去上一位角色
+  }
   html += renderNightGroupAction(group) + backBtn;
   return html;
 }
@@ -917,7 +936,7 @@ function renderNightGroupAction(group){
     var seat=findAliveSeatWithRole('guard');
     var last=roleAbilities(seat).guardLastTarget;
     var options = alive.filter(function(n){ return n!==last; });
-    return '<div class="card stack"><h2>請守衛睜眼</h2><p class="muted small">守衛（'+seat+'號）選擇今晚守護對象；不能與昨晚相同（'+(last||'無')+'）。</p>'
+    return '<div class="card stack"><h2>守衛請睜眼，今晚你要守護的對象是?</h2><p class="muted small">守衛（'+seat+'號）選擇今晚守護的對象，不能與昨晚相同（'+(last||'無')+'）。</p>'
       + '<div class="btngrid">' + options.map(function(n){return '<button class="btn btn-sm" data-act="night-guard" data-n="'+n+'" data-confirm="確定守衛守護 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
       + '<button class="btn btn-ghost btn-block" data-act="night-guard" data-n="0">今晚不守護任何人</button></div>';
   }
@@ -948,7 +967,7 @@ function renderNightGroupAction(group){
     var nl=currentNightlog();
     var deathSeat = nl.wolfTarget || 0;
     var selfSaveOk = deathSeat!==wseat || (rc().witchSelfSaveFirstNight && state.game.nightNumber===1);
-    var html='<div class="card stack"><h2>請女巫睜眼</h2>'
+    var html='<div class="card stack"><h2>女巫請睜眼，今晚他被殺死了，你要使用解藥嗎?你要使用毒藥嗎?</h2>'
       + '<p class="muted small">今晚死訊：'+(deathSeat?deathSeat+' 號被攻擊':'無人被攻擊')+'。</p>';
 
     var antidoteStageDone = !!nl.antidoteDeclined || !!nl.antidoteTarget;
@@ -962,8 +981,8 @@ function renderNightGroupAction(group){
         html += '<p class="small muted">被攻擊的是女巫自己，依規則本局不可自救。</p><button class="btn btn-primary btn-block" data-act="night-witch-nosave">知道了，繼續</button>';
       } else {
         html += '<div class="row wrap">'
-          + '<button class="btn btn-good" data-act="night-witch-save" data-n="'+deathSeat+'" data-confirm="確定使用解藥救 '+deathSeat+' 號嗎？（解藥只有一瓶，用掉就沒有了）">使用解藥救 '+deathSeat+' 號</button>'
-          + '<button class="btn btn-ghost" data-act="night-witch-nosave">不使用解藥</button></div>';
+          + '<button class="btn" data-act="night-witch-save" data-n="'+deathSeat+'">使用解藥救 '+deathSeat+' 號</button>'
+          + '<button class="btn" data-act="night-witch-nosave">不使用解藥</button></div>';
       }
       html += '</div>';
       return html;
@@ -979,7 +998,7 @@ function renderNightGroupAction(group){
         html += '<p class="small muted">今晚已使用解藥，依規則不能同時使用毒藥。</p><button class="btn btn-primary btn-block" data-act="night-witch-nopoison">知道了，繼續</button>';
       } else {
         html += '<div class="field"><label>使用毒藥（可略過）</label><div class="btngrid">'
-          + alive.filter(function(n){return n!==wseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-witch-poison" data-n="'+n+'" data-confirm="確定對 '+n+' 號使用毒藥嗎？（毒藥只有一瓶，用掉就沒有了）">'+n+'</button>';}).join('')
+          + alive.filter(function(n){return n!==wseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-witch-poison" data-n="'+n+'">'+n+'</button>';}).join('')
           + '</div></div>'
           + '<button class="btn btn-ghost btn-block" data-act="night-witch-nopoison" style="margin-top:8px;">不使用毒藥</button>';
       }
@@ -998,13 +1017,15 @@ function renderNightGroupAction(group){
     var nl=currentNightlog();
     if(nl.seerTarget){
       return '<div class="gesture"><div class="big">'+nl.seerTarget+' 號是「'+nl.seerResult+'」</div><p class="small">請用手勢告知預言家查驗結果（例如：好人比 OK、狼人比叉），不要開口說明，比完手勢再繼續。</p>'
-        + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
+        + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button>'
+        + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="night-seer-back">← 上一步（重新選擇查驗目標）</button></div>';
     }
     if(nl.seerPendingTarget){
       var target=nl.seerPendingTarget;
       var options=remainingRoleOptions();
       return '<div class="card stack"><h2>'+target+' 號的身份還沒登記過</h2><p class="muted small">預言家要查驗這一位，請先確認他實際的身份，系統才能正確告知查驗結果。</p>'
-        + '<div class="stack">'+options.map(function(r){return '<button class="btn btn-sm" data-act="assign-seer-target-role" data-n="'+target+'" data-r="'+r+'" data-confirm="確定 '+target+' 號的身份是「'+ROLES[r].name+'」嗎？">'+ROLES[r].name+'</button>';}).join('')+'</div></div>';
+        + '<div class="stack">'+options.map(function(r){return '<button class="btn btn-sm" data-act="assign-seer-target-role" data-n="'+target+'" data-r="'+r+'" data-confirm="確定 '+target+' 號的身份是「'+ROLES[r].name+'」嗎？">'+ROLES[r].name+'</button>';}).join('')+'</div>'
+        + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="night-seer-back">← 上一步（重新選擇查驗目標）</button></div>';
     }
     return '<div class="card stack"><h2>請預言家睜眼</h2><p class="muted small">預言家（'+sseat+'號）選擇一位查驗。</p>'
       + '<div class="btngrid">' + alive.filter(function(n){return n!==sseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-seer" data-n="'+n+'" data-confirm="確定查驗 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div></div>';
@@ -1142,6 +1163,11 @@ async function finalizeSeerCheck(n, role){
   var hist=(roleAbilities(sseat).checkedHistory)||[];
   hist=hist.concat([{n:n,result:result,night:state.game.nightNumber}]);
   await updateRole(sseat,{abilities:Object.assign({},roleAbilities(sseat),{checkedHistory:hist})});
+}
+/* 預言家自己的「上一步」：只清掉這一晚查驗的選擇/結果，回到重新選目標的畫面，
+   不動全局的 nightStepIndex，不能誤用外層那顆跳去上一位角色的「上一步」。 */
+async function actSeerBack(){
+  await db.collection('nightlog').doc(currentNightlogKey()).update({seerTarget:null, seerResult:null, seerPendingTarget:null});
 }
 
 /* ---- 死亡結算引擎（夜晚 & 白天共用）---- */
@@ -1805,8 +1831,22 @@ function handleAction(act, el){
     ui.pickSeatRole=null; render();
     return;
   }
+  if(act==='update-seat-nick'){
+    var n=Number(el.getAttribute('data-n'));
+    var nick=(($app.querySelector('#editSeatNick')||{}).value||'').trim();
+    updateSeat(n,{nickname:nick});
+    return;
+  }
+  if(act==='manual-claim-seat'){
+    var n=Number(el.getAttribute('data-n'));
+    var nick=(($app.querySelector('#manualSeatNick')||{}).value||'').trim();
+    setSeat(n,{seatNumber:n,occupied:true,nickname:nick,alive:true});
+    ui.pickSeatRole=null; render();
+    return;
+  }
   if(act==='night-skip'){ nightAdvance(); return; }
   if(act==='night-back'){ actNightBack(); return; }
+  if(act==='night-seer-back'){ actSeerBack(); return; }
   if(act==='night-guard'){ actNightGuard(Number(el.getAttribute('data-n'))); return; }
   if(act==='night-wolf'){ actNightWolf(Number(el.getAttribute('data-n'))); return; }
   if(act==='night-charm'){ actNightCharm(Number(el.getAttribute('data-n'))); return; }
