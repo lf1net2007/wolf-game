@@ -866,6 +866,19 @@ function groupExistsInConfig(group){
   return false;
 }
 
+/* 所有會睜眼的角色都標記完之後，剩下還沒標記身份的座位如果能唯一推斷成平民就自動標記——
+   前提是本局的白痴/騎士名額也都已經標記完（或本局沒有這兩個角色），因為白痴/騎士不在夜晚
+   睜眼流程裡，要是還有名額沒標記，貿然自動填平民會蓋掉他們，之後死亡/自報身份時就抓不到，
+   所以這種情況先不自動填，留給上帝之後在座位管理手動標記或死亡結算時再補問身份。 */
+function autoFillVillagers(){
+  var ambiguous = ['idiot','knight'].some(function(r){
+    return findSeatsWithRole(r).length < (roleConfigCounts()[r]||0);
+  });
+  if(ambiguous) return;
+  seatNums().forEach(function(n){
+    if(seatData(n).occupied && !roleOfSeat(n)){ updateRole(n,{role:'villager'}); }
+  });
+}
 function renderNightEngine(){
   ensureNightlog();
   var groups=activeNightGroups();
@@ -879,6 +892,7 @@ function renderNightEngine(){
   var backBtn = idx>0 ? '<button class="btn btn-ghost btn-block" data-act="night-back" data-confirm="確定要回到上一位角色重新處理嗎？上一位角色這一晚做的選擇會被清空，可以重新選一次。">← 上一步（回到上一位角色重新處理）</button>' : '';
 
   if(idx>=groups.length){
+    autoFillVillagers();
     var willCallSheriff = (state.game.dayNumber||0)===0 && rc().sheriffEnabled;
     html += '<div class="card stack"><h2>夜晚結束</h2><p class="muted">'
       + (willCallSheriff ? '所有睜眼流程已完成，天亮了——請先讓想競選警長的玩家起立報名，登記完才會正式公布昨晚的死訊。' : '所有睜眼流程已完成，可以天亮公布死訊。')
@@ -941,9 +955,16 @@ function renderNightGroupAction(group){
       + '<button class="btn btn-ghost btn-block" data-act="night-guard" data-n="0">今晚不守護任何人</button></div>';
   }
   if(group==='wolf'){
+    // 狼人（含狼王/白狼王）睜眼時要先讓上帝逐一標記清楚是哪幾個座位，
+    // 標記完才進入「全體共同決定殺誰」的畫面——沿用跟守衛/女巫一樣的 pickIdentifyUI。
+    var wolfRoles = ['wolf','wolfking','whitewolfking'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
+    for(var wi=0; wi<wolfRoles.length; wi++){
+      var pickW = pickIdentifyUI(wolfRoles[wi], ROLES[wolfRoles[wi]].name);
+      if(pickW) return pickW;
+    }
     var wolfVariants = ['wolfking','whitewolfking'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
-    var variantNote = wolfVariants.length ? ('本局狼人陣營還包含：'+wolfVariants.map(function(r){return ROLES[r].name;}).join('、')+'，他們現在跟普通狼人一起睜眼、共同決定殺人目標即可，沒有額外的夜間動作（能力是死亡/白天才觸發，等時機到了系統會提示）。') : '';
-    return '<div class="card stack"><h2>請狼人睜眼</h2><p class="muted small">全體狼人共同決定今晚擊殺目標（狼人彼此身份不用登記，等死亡時再標記即可）。</p>'
+    var variantNote = wolfVariants.length ? ('本局狼人陣營還包含：'+wolfVariants.map(function(r){return ROLES[r].name;}).join('、')+'，能力是死亡/白天才觸發，等時機到了系統會提示。') : '';
+    return '<div class="card stack"><h2>請狼人睜眼</h2><p class="muted small">全體狼人共同決定今晚擊殺目標。</p>'
       + (variantNote?'<p class="small muted">'+variantNote+'</p>':'')
       + '<div class="btngrid">' + alive.map(function(n){return '<button class="btn btn-sm" data-act="night-wolf" data-n="'+n+'" data-confirm="確定狼人今晚殺 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
       + '<button class="btn btn-ghost btn-block" data-act="night-wolf" data-n="0">今晚空刀</button></div>';
