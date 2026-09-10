@@ -939,8 +939,9 @@ function pickIdentifyUI(roleId, contextLabel){
   var need = roleConfigCounts()[roleId]||0;
   if(have>=need) return null;
   var candidates = aliveSeatList().filter(function(n){ return !roleOfSeat(n); });
+  // 不加二次確認：點錯了可以直接到下面「座位管理」點開那個座位重新標記，不用每標記一個人就多按一次確認。
   return '<div class="card stack"><h2>標記身份：'+contextLabel+'</h2><p class="muted small">請看誰睜眼／示意，點出是哪一位座位。</p>'
-    + '<div class="btngrid">'+candidates.map(function(n){return '<button class="btn btn-sm" data-act="assign-role-quick" data-r="'+roleId+'" data-n="'+n+'" data-confirm="確定 '+n+' 號是'+ROLES[roleId].name+'嗎？">'+n+'</button>';}).join('')+'</div></div>';
+    + '<div class="btngrid">'+candidates.map(function(n){return '<button class="btn btn-sm" data-act="assign-role-quick" data-r="'+roleId+'" data-n="'+n+'">'+n+'</button>';}).join('')+'</div></div>';
 }
 function renderNightGroupAction(group){
   var alive = aliveSeatList();
