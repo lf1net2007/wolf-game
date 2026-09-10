@@ -105,19 +105,20 @@
   .seat .nick{font-size:11px;color:var(--text-muted);margin-top:3px;height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .seat.empty{border-style:dashed;color:var(--text-muted);box-shadow:none;}
   .seat.tagged{background:var(--accent-good-soft);}
-  /* 座位管理：標記身份後依角色分色，比單一綠色更好辨識是哪個角色（守衛藍／女巫亮紅／
-     預言家紫／獵人黃／狼人深紅／平民黃，其餘角色還沒指定顏色、維持上面的 .tagged 綠色）。
+  /* 座位管理：標記身份後依角色分色，比單一綠色更好辨識是哪個角色（守衛藍天藍／女巫鮮紅／
+     預言家桃紫／獵人亮黃／狼人陣營（含狼王/白狼王/狼美人）深紅／平民較暗的黃，
+     其餘角色還沒指定顏色、維持上面的 .tagged 綠色）。
      宣告順序要放在 .tagged 之後、.dead 之前，才能蓋過綠色，又會被死亡狀態蓋過去。 */
   .seat[class*="role-"]{color:#fff;}
   .seat[class*="role-"] .nick{color:rgba(255,255,255,.85);}
   .seat.role-hunter,.seat.role-villager{color:#241b3a;}
   .seat.role-hunter .nick,.seat.role-villager .nick{color:rgba(36,27,58,.7);}
-  .seat.role-guard{background:#2f6fed;}
-  .seat.role-witch{background:#ff2740;}
-  .seat.role-seer{background:#8b5cf6;}
-  .seat.role-hunter{background:#f5d90a;}
-  .seat.role-wolf{background:#7a0d0d;}
-  .seat.role-villager{background:#f5d90a;}
+  .seat.role-guard{background:#0ea5e9;}
+  .seat.role-witch{background:#f20000;}
+  .seat.role-seer{background:#8e2a8e;}
+  .seat.role-hunter{background:#ffe600;}
+  .seat.role-wolf{background:#c8102e;}
+  .seat.role-villager{background:#e6c200;}
   .seat.dead{opacity:.75;border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);background:var(--accent-wolf-soft);color:var(--text);}
   .seat.dead .nick{color:var(--text-muted);}
   .seat.dead::after{
@@ -254,9 +255,11 @@ var ROLES = {
 var ROLE_LIST=['villager','wolf','wolfking','whitewolfking','wolfbeauty','seer','witch','hunter','guard','idiot','knight'];
 var FACTION_LABEL={wolf:'狼人陣營',good_god:'好人陣營・神職',good_villager:'好人陣營・平民'};
 var FACTION_BADGE={wolf:'badge-wolf',good_god:'badge-good',good_villager:'badge-muted'};
-// 座位管理標記身份後依角色分色（使用者指定：守衛藍／女巫亮紅／預言家紫／獵人黃／狼人深紅／平民黃）；
-// 其餘角色（狼王/白狼王/狼美人/白痴/騎士）還沒指定顏色，先不列在這裡，維持原本的綠色 .tagged。
-var ROLE_SEAT_COLOR_CLASS={guard:'role-guard',witch:'role-witch',seer:'role-seer',hunter:'role-hunter',wolf:'role-wolf',villager:'role-villager'};
+// 座位管理標記身份後依角色分色（使用者指定：守衛藍天藍／女巫鮮紅／預言家桃紫／獵人亮黃／
+// 平民較暗的黃／狼人陣營全部深紅——狼人/狼王/白狼王/狼美人共用同一個顏色，不分開)。
+// 其餘角色（白痴/騎士）還沒指定顏色，先不列在這裡，維持原本的綠色 .tagged。
+var ROLE_SEAT_COLOR_CLASS={guard:'role-guard',witch:'role-witch',seer:'role-seer',hunter:'role-hunter',
+  wolf:'role-wolf',wolfking:'role-wolf',whitewolfking:'role-wolf',wolfbeauty:'role-wolf',villager:'role-villager'};
 
 function nightGroupOrder(rc){
   // 特殊狼（狼王/白狼王/狼美人）如果在場，先在「wolfspecial」這一步把身份標記清楚，
@@ -821,7 +824,7 @@ function renderGodBottomTools(){
   if(remaining.length){
     html += '<p class="small muted">還沒標記完的角色：'+remaining.map(function(r){return ROLES[r].name+'('+(assignedByRole[r]||0)+'/'+roleConfigCounts()[r]+')';}).join('、')+'</p>';
   }
-  html += '<p class="small muted">每一個座位都可以點選，跳出視窗可以標記/修改身份、改暱稱、標記存活死亡或清空座位——已經標記身份的座位會依角色分色（守衛藍／女巫亮紅／預言家紫／獵人黃／狼人深紅／平民黃，其餘角色暫時維持綠色），一眼就能看出誰還沒登記；當選警長的座位會有小皇冠標示。</p>';
+  html += '<p class="small muted">每一個座位都可以點選，跳出視窗可以標記/修改身份、改暱稱、標記存活死亡或清空座位——已經標記身份的座位會依角色分色（守衛藍天藍／女巫鮮紅／預言家桃紫／獵人亮黃／狼人陣營深紅／平民較暗的黃，其餘角色暫時維持綠色），一眼就能看出誰還沒登記；當選警長的座位會有小皇冠標示。</p>';
   html += '<div class="seat-grid">' + seatNums().map(function(n){
     var s=seatData(n); var role=roleOfSeat(n);
     var tagged = !!role; // 不看 occupied：不開手機也可能已經被標記身份（例如自動填平民）
