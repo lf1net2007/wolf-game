@@ -110,9 +110,9 @@
   }
   .seat.me{border-color:var(--accent-focus);box-shadow:3px 3px 0 var(--accent-focus);}
   .seat.sheriff::before{
-    content:'👑'; position:absolute; top:-11px; right:-9px; width:22px; height:22px; z-index:2;
+    content:'👑'; position:absolute; top:-9px; right:-9px; width:22px; height:22px; z-index:2;
     background:var(--accent-brass); border:2px solid var(--border); border-radius:50%;
-    display:flex; align-items:center; justify-content:center; font-size:13px; line-height:1;
+    display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1;
     transform:rotate(14deg); box-shadow:2px 2px 0 var(--border);
   }
   .seat.selected{border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);}
@@ -126,9 +126,6 @@
   .step.skip{border-color:var(--bg-sunken);}
   .step.skip::before{background:var(--bg-sunken);border-color:var(--bg-sunken);}
 
-  .gesture{position:relative;background:var(--accent-brass-soft);border:3px solid var(--accent-brass);border-radius:20px;padding:16px;margin-bottom:8px;}
-  .gesture .big{font-family:var(--font-body);font-weight:900;font-size:16px;color:var(--text);}
-  .gesture::after{content:'';position:absolute;left:32px;bottom:-13px;width:0;height:0;border:13px solid transparent;border-top-color:var(--accent-brass);border-bottom:0;}
 
   .vote-breakdown-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;border:2.5px solid var(--border);border-radius:13px;background:var(--bg-sunken);box-shadow:2px 2px 0 var(--border);}
   .vote-breakdown-row .arrow{color:var(--text-muted);font-weight:900;font-size:15px;}
@@ -820,13 +817,17 @@ function renderGodBottomTools(){
 }
 /* 點座位跳出的「座位管理」彈出視窗：取代原本條列+下拉選單的做法，改成點按鈕，
    同一頁也能直接改暱稱、標記存活/死亡、或清空整個座位；空位則改顯示手動入座的表單。 */
+/* 不管這個座位有沒有開手機入座（occupied），一律顯示完整的管理畫面——改暱稱、標記/換身份、
+   標記存活死亡都要能用，這裡是「上帝的最後防線」，不能因為玩家沒開手機就少一半功能。
+   只要在這裡改暱稱或標記身份，就視同這個座位已經入座（自動補上 occupied:true）。 */
 function renderPickRoleForSeat(n){
   var s=seatData(n);
-  if(!s.occupied) return renderPickEmptySeat(n);
   var role=roleOfSeat(n);
   var options=roleOptionsFor(role);
   var html='<div class="card stack"><h2>座位管理：'+n+' 號</h2>'
-    + '<p class="muted small">目前身份：'+(role?ROLES[role].name:'未標記')+'　·　狀態：'+(s.alive?'存活':'<b style="color:var(--accent-wolf);">已死亡</b>')+'</p>'
+    + (s.occupied
+        ? '<p class="muted small">目前身份：'+(role?ROLES[role].name:'未標記')+'　·　狀態：'+(s.alive?'存活':'<b style="color:var(--accent-wolf);">已死亡</b>')+'</p>'
+        : '<p class="muted small">這個座位還沒有人開手機入座，上帝可以直接在這裡代為標記；標記身份或改暱稱後會自動視為已入座。目前身份：'+(role?ROLES[role].name:'未標記')+'</p>')
     + '<div class="field"><label>暱稱</label><div class="row"><input type="text" id="editSeatNick" value="'+esc(s.nickname||'')+'" placeholder="暱稱" style="flex:1;"><button class="btn btn-sm" data-act="update-seat-nick" data-n="'+n+'">更新</button></div></div>'
     + '<div class="eyebrow" style="margin-top:4px;">標記身份</div>'
     + '<div class="btngrid">'
@@ -834,18 +835,10 @@ function renderPickRoleForSeat(n){
     + '</div>'
     + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="set-seat-role" data-n="'+n+'" data-r="">清除身份標記（改回未標記）</button>'
     + '<button class="btn '+(s.alive?'btn-wolf':'btn-good')+' btn-block" style="margin-top:8px;" data-act="toggle-alive" data-n="'+n+'">標記為'+(s.alive?'已死亡':'存活')+'</button>'
-    + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="clear-seat" data-n="'+n+'" data-confirm="確定要清空 '+n+' 號座位嗎？這個座位會變回空位，玩家要重新入座。">清空這個座位</button>'
+    + (s.occupied ? '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="clear-seat" data-n="'+n+'" data-confirm="確定要清空 '+n+' 號座位嗎？這個座位會變回空位，玩家要重新入座。">清空這個座位</button>' : '')
     + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="close-pick-role">取消，返回</button>'
     + '</div>';
   return html;
-}
-function renderPickEmptySeat(n){
-  return '<div class="card stack"><h2>'+n+' 號目前是空位</h2>'
-    + '<p class="muted small">如果這位玩家沒有打開手機入座（或入座打錯座位），可以在這裡幫他手動登記，避免流程卡住。</p>'
-    + '<div class="field"><label>暱稱（可留空）</label><input type="text" id="manualSeatNick" placeholder="暱稱"></div>'
-    + '<button class="btn btn-primary btn-block" data-act="manual-claim-seat" data-n="'+n+'">手動入座</button>'
-    + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="close-pick-role">取消，返回</button>'
-    + '</div>';
 }
 function renderGodOnlyLog(){
   var items=[];
@@ -894,13 +887,16 @@ function groupExistsInConfig(group){
   return false;
 }
 
-/* 所有會睜眼的角色都標記完之後，剩下還沒標記身份的已入座座位直接自動標記成平民——
+/* 所有會睜眼的角色都標記完之後，剩下還沒標記身份的座位直接自動標記成平民——
+   不能只看 occupied（有沒有開手機入座），因為這個 App 本來就設計成玩家不開手機也能玩、
+   上帝口頭代為操作，很多座位一輩子 occupied 都是 false，只看 occupied 會導致這個座位
+   永遠不會被自動填平民。只要座位號碼在本局總人數範圍內，就當作是真的玩家。
    白痴/騎士不在夜晚睜眼流程裡，如果本局有這兩個角色、又還沒死亡/自報身份，座位會先被
    標成平民，等他們死亡或自己跳出來時，上帝要記得到「座位管理」把身份改回白痴/騎士，
    不然白痴免死、騎士決鬥這些判定會抓不到人。 */
 function autoFillVillagers(){
   seatNums().forEach(function(n){
-    if(seatData(n).occupied && !roleOfSeat(n)){ updateRole(n,{role:'villager'}); }
+    if(!roleOfSeat(n)){ updateRole(n,{role:'villager'}); }
   });
 }
 function renderNightEngine(){
@@ -928,7 +924,7 @@ function renderNightEngine(){
   }
   var group=groups[idx];
   if(!groupExistsInConfig(group)){
-    html += '<div class="gesture"><div class="big">本局沒有「'+nightGroupLabel(group)+'」角色</div><p class="small">直接略過這一步，不用喊名。</p>'
+    html += '<div class="card stack"><h2>本局沒有「'+nightGroupLabel(group)+'」角色</h2><p class="muted small">直接略過這一步，不用喊名。</p>'
       + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>'
       + backBtn;
     return html;
@@ -937,8 +933,8 @@ function renderNightEngine(){
     // 這個角色其實已經沒有存活者了，但每一夜的導讀台詞都要跟角色還活著時一模一樣，
     // 不能因為沒人可以睜眼就換一種講法或直接跳過不喊——這樣才不會讓其他閉眼的玩家從
     // 上帝喊名的節奏/內容變化，推測出這個角色已經死亡。上帝內部操作上直接按下一步即可。
-    html += '<div class="gesture"><div class="big">請'+nightGroupLabel(group)+'睜眼</div>'
-      + '<p class="small">（稍等一下，不用等待任何回應）接著照樣說：「請'+nightGroupLabel(group)+'閉眼」。上帝內部備註：此角色已無存活者，操作上直接按下一步即可，不用等待、不用比手勢。</p>'
+    html += '<div class="card stack"><h2>請'+nightGroupLabel(group)+'睜眼</h2>'
+      + '<p class="muted small">（稍等一下，不用等待任何回應）接著照樣說：「請'+nightGroupLabel(group)+'閉眼」。上帝內部備註：此角色已無存活者，操作上直接按下一步即可，不用等待、不用比手勢。</p>'
       + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>'
       + backBtn;
     return html;
@@ -985,25 +981,27 @@ async function actUndoIdentify(group){
 }
 
 /* 首次遇到「守衛/女巫/預言家/狼美人」這種一睜眼就會暴露身份的角色時，
-   請上帝就地標記是哪個座位——這對應現實中「上帝親眼看到誰睜眼」那一刻。 */
-function pickIdentifyUI(roleId, contextLabel){
+   請上帝就地標記是哪個座位——這對應現實中「上帝親眼看到誰睜眼」那一刻。
+   h2 放的是這個角色平常會唸出口的導讀台詞（跟後面動作畫面共用同一句），
+   「標記身份：XX」這種上帝內部操作備註移到下面 muted 小字，維持「唸白 vs 操作說明」一致的格式。 */
+function pickIdentifyUI(roleId, wakeLine){
   var have = findSeatsWithRole(roleId).length;
   var need = roleConfigCounts()[roleId]||0;
   if(have>=need) return null;
   var candidates = aliveSeatList().filter(function(n){ return !roleOfSeat(n); });
   // 不加二次確認：點錯了可以直接到下面「座位管理」點開那個座位重新標記，不用每標記一個人就多按一次確認。
-  return '<div class="card stack"><h2>標記身份：'+contextLabel+'</h2><p class="muted small">請看誰睜眼／示意，點出是哪一位座位。</p>'
+  return '<div class="card stack"><h2>'+wakeLine+'</h2><p class="muted small">標記身份：'+ROLES[roleId].name+'——請看誰睜眼／示意，點出是哪一位座位。</p>'
     + '<div class="btngrid">'+candidates.map(function(n){return '<button class="btn btn-sm" data-act="assign-role-quick" data-r="'+roleId+'" data-n="'+n+'">'+n+'</button>';}).join('')+'</div></div>';
 }
 function renderNightGroupAction(group){
   var alive = aliveSeatList();
   if(group==='guard'){
-    var pick=pickIdentifyUI('guard','守衛');
+    var pick=pickIdentifyUI('guard','守衛請睜眼，今晚你要守護的對象是...');
     if(pick) return pick;
     var seat=findAliveSeatWithRole('guard');
     var last=roleAbilities(seat).guardLastTarget;
     var options = alive.filter(function(n){ return n!==last; });
-    return '<div class="card stack"><h2>守衛請睜眼，今晚你要守護的對象是?</h2><p class="muted small">守衛（'+seat+'號）選擇今晚守護的對象，不能與昨晚相同（'+(last||'無')+'）。</p>'
+    return '<div class="card stack"><h2>守衛請睜眼，今晚你要守護的對象是...</h2><p class="muted small">守衛（'+seat+'號）選擇今晚守護的對象，不能與昨晚相同（'+(last||'無')+'）。</p>'
       + '<div class="btngrid">' + options.map(function(n){return '<button class="btn btn-sm" data-act="night-guard" data-n="'+n+'" data-confirm="確定守衛守護 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
       + '<button class="btn btn-ghost btn-block" data-act="night-guard" data-n="0">今晚不守護任何人</button></div>';
   }
@@ -1012,30 +1010,40 @@ function renderNightGroupAction(group){
     // 標記完才輪到「狼人」這一步；沿用跟守衛/女巫一樣的 pickIdentifyUI。
     var specialRoles = ['wolfking','whitewolfking','wolfbeauty'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
     for(var si=0; si<specialRoles.length; si++){
-      var pickS = pickIdentifyUI(specialRoles[si], ROLES[specialRoles[si]].name);
+      var pickS = pickIdentifyUI(specialRoles[si], '狼人現身請睜眼，今晚要擊殺的對象是...');
       if(pickS) return pickS;
     }
-    return '<div class="gesture"><div class="big">特殊狼身份已確認</div>'
-      + '<p class="small">本局的'+specialRoles.map(function(r){return ROLES[r].name;}).join('、')+'身份都已標記完成，接著請狼人一起睜眼。</p>'
+    return '<div class="card stack"><h2>特殊狼身份已確認</h2>'
+      + '<p class="muted small">本局的'+specialRoles.map(function(r){return ROLES[r].name;}).join('、')+'身份都已標記完成，接著請狼人一起睜眼。</p>'
       + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
   }
   if(group==='wolf'){
-    // 普通狼人睜眼時標記清楚是哪幾個座位（狼王/白狼王已經在「特殊狼」那一步標記過了），
-    // 標記完才進入「全體共同決定殺誰」的畫面——沿用跟守衛/女巫一樣的 pickIdentifyUI。
-    var pickW = pickIdentifyUI('wolf', ROLES.wolf.name);
-    if(pickW) return pickW;
+    // 普通狼人睜眼時標記清楚是哪幾個座位（狼王/白狼王已經在「特殊狼」那一步標記過了）。
+    // 因為通常是好幾隻狼一起現身，改成跟上警登記一樣「複選再一起確認」，不用一個一個點。
+    var wolfNeed = roleConfigCounts().wolf||0;
+    var wolfHave = findSeatsWithRole('wolf').length;
+    if(wolfHave < wolfNeed){
+      var picked = ui.wolfIdentifyPicked||[];
+      var wolfCandidates = aliveSeatList().filter(function(n){ return !roleOfSeat(n); });
+      var stillNeed = wolfNeed - wolfHave;
+      return '<div class="card stack"><h2>狼人現身請睜眼，今晚要擊殺的對象是...</h2>'
+        + '<p class="muted small">標記身份：狼人——點選所有狼人的座位（可複選，還差 '+stillNeed+' 位），選完按下方確認。</p>'
+        + '<div class="btngrid">'+wolfCandidates.map(function(n){return '<button class="btn btn-sm'+(picked.indexOf(n)>=0?' btn-wolf':'')+'" data-act="toggle-wolf-identify" data-n="'+n+'">'+n+'</button>';}).join('')+'</div>'
+        + '<button class="btn btn-primary btn-block" style="margin-top:10px;" data-act="confirm-wolf-identify" '+(picked.length!==stillNeed?'disabled':'')+'>標記完成（已選 '+picked.length+' / '+stillNeed+'）</button>'
+        + '</div>';
+    }
     var wolfVariants = ['wolfking','whitewolfking'].filter(function(r){ return (roleConfigCounts()[r]||0)>0; });
     var variantNote = wolfVariants.length ? ('本局狼人陣營還包含：'+wolfVariants.map(function(r){return ROLES[r].name;}).join('、')+'，能力是死亡/白天才觸發，等時機到了系統會提示。') : '';
-    return '<div class="card stack"><h2>請狼人睜眼</h2><p class="muted small">全體狼人共同決定今晚擊殺目標。</p>'
+    return '<div class="card stack"><h2>狼人現身請睜眼，今晚要擊殺的對象是...</h2>'
       + (variantNote?'<p class="small muted">'+variantNote+'</p>':'')
       + '<div class="btngrid">' + alive.map(function(n){return '<button class="btn btn-sm" data-act="night-wolf" data-n="'+n+'" data-confirm="確定狼人今晚殺 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
       + '<button class="btn btn-ghost btn-block" data-act="night-wolf" data-n="0">今晚空刀</button></div>';
   }
   if(group==='wolfbeauty'){
-    var pickB=pickIdentifyUI('wolfbeauty','狼美人');
+    var pickB=pickIdentifyUI('wolfbeauty','狼美人請睜眼，今晚你要魅惑的對象是...');
     if(pickB) return pickB;
     var beautySeat=findAliveSeatWithRole('wolfbeauty');
-    return '<div class="card stack"><h2>請狼美人睜眼</h2><p class="muted small">狼美人（'+beautySeat+'號）選擇今晚魅惑對象（其他狼人已經閉眼，這是她自己單獨的選擇）。</p>'
+    return '<div class="card stack"><h2>狼美人請睜眼，今晚你要魅惑的對象是...</h2><p class="muted small">狼美人（'+beautySeat+'號）選擇今晚魅惑對象（其他狼人已經閉眼，這是她自己單獨的選擇）。</p>'
       + '<div class="btngrid">' + alive.filter(function(n){return n!==beautySeat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-charm" data-n="'+n+'" data-confirm="確定狼美人魅惑 '+n+' 號嗎？">'+n+'</button>';}).join('') + '</div>'
       + '<button class="btn btn-ghost btn-block" data-act="night-charm" data-n="0">今晚不魅惑</button></div>';
   }
@@ -1043,7 +1051,7 @@ function renderNightGroupAction(group){
     // 不管解藥/毒藥還有沒有，每晚都要走「階段一→階段二」同樣的兩步節奏，
     // 差別只在按鈕內容，藥用完了也要照樣點一次「知道了，繼續」──
     // 這樣上帝每晚花在女巫身上的步驟數/停留時間都一樣，閉眼的其他玩家才不會從節奏猜出解藥還在不在。
-    var pick=pickIdentifyUI('witch','女巫');
+    var pick=pickIdentifyUI('witch','女巫請睜眼，今晚他被殺死了，你要使用解藥嗎?你要使用毒藥嗎?');
     if(pick) return pick;
     var wseat=findAliveSeatWithRole('witch');
     var ab=roleAbilities(wseat);
@@ -1095,13 +1103,13 @@ function renderNightGroupAction(group){
     return html + '<p class="small muted">女巫行動已完成，準備進入下一位…</p></div>';
   }
   if(group==='seer'){
-    var pick=pickIdentifyUI('seer','預言家');
+    var pick=pickIdentifyUI('seer','預言家請睜眼，你今晚要查驗的對象是...');
     if(pick) return pick;
     var sseat=findAliveSeatWithRole('seer');
     var nl=currentNightlog();
     if(nl.seerTarget){
-      return '<div class="gesture"><div class="big">他的身份是...</div>'
-        + '<p class="small">請以手勢告知，正讚為好人、倒讚為狼人。</p>'
+      return '<div class="card stack"><h2>他的身份是...</h2>'
+        + '<p class="muted small">請以手勢告知，正讚為好人、倒讚為狼人。</p>'
         + '<p class="small muted" style="margin-top:6px;">📖 上帝內部參考（不用唸出來）：'+nl.seerTarget+' 號的身份是「'+nl.seerResult+'」。</p>'
         + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button>'
         + '<button class="btn btn-ghost btn-block" style="margin-top:8px;" data-act="night-seer-back">← 上一步（重新選擇查驗目標）</button></div>';
@@ -1117,14 +1125,14 @@ function renderNightGroupAction(group){
       + '<div class="btngrid">' + alive.filter(function(n){return n!==sseat;}).map(function(n){return '<button class="btn btn-sm" data-act="night-seer" data-n="'+n+'">'+n+'</button>';}).join('') + '</div></div>';
   }
   if(group==='hunter'){
-    var pick=pickIdentifyUI('hunter','獵人');
+    var pick=pickIdentifyUI('hunter','獵人請睜眼，你今晚的開槍手勢是...');
     if(pick) return pick;
     var hseat=findAliveSeatWithRole('hunter');
     var deaths=computeNightDeaths();
     var dying=deaths.find(function(d){return d.seat===hseat;});
     var canShoot = !(dying && dying.cause==='poison' && !rc().hunterCanShootIfPoisoned);
-    return '<div class="gesture"><div class="big">獵人請睜眼，你今晚的開槍手勢是...</div>'
-      + '<p class="small">請以手勢告知，正讚為出局可以開槍、倒讚為不能開槍。</p>'
+    return '<div class="card stack"><h2>獵人請睜眼，你今晚的開槍手勢是...</h2>'
+      + '<p class="muted small">請以手勢告知，正讚為出局可以開槍、倒讚為不能開槍。</p>'
       + '<p class="small muted" style="margin-top:6px;">📖 上帝內部參考（不用唸出來）：'+(canShoot?'比正讚（可以開槍）。':'比倒讚（今晚中毒身亡，不能開槍）。')+'獵人要到明天上帝公布死訊時才會知道自己是否真的出局。</p>'
       + '<button class="btn btn-primary btn-block" data-act="night-skip" style="margin-top:10px;">下一步</button></div>';
   }
@@ -1544,7 +1552,7 @@ function renderDaySpecialActions(){
     html += '<div class="row between"><span class="small muted">白狼王（'+wwk+'號）可自爆：立即死亡並開槍帶走一人，直接跳過剩餘白天流程進入夜晚。</span>'
       + '<button class="btn btn-wolf btn-sm" data-act="wwk-detonate" data-n="'+wwk+'" data-confirm="確定自爆嗎？會立即死亡並跳過剩餘白天流程進入夜晚。">自爆</button></div>';
   } else if(wwkConfigured){
-    html += '<div class="small muted">如果有玩家說自己是白狼王、要自爆，先在下面標記是哪一位：</div>' + pickIdentifyUI('whitewolfking','白狼王');
+    html += '<div class="small muted">如果有玩家說自己是白狼王、要自爆，先在下面標記是哪一位：</div>' + pickIdentifyUI('whitewolfking','有人說自己是白狼王');
   }
   if(knightSeat && !knightUsed){
     if(ui.targetSel==='knight'){
@@ -1557,7 +1565,7 @@ function renderDaySpecialActions(){
         + '<button class="btn btn-sm" data-act="knight-start">決鬥</button></div>';
     }
   } else if(knightConfigured && !knightSeat){
-    html += '<div class="small muted" style="margin-top:8px;">如果有玩家說自己是騎士、要決鬥，先在下面標記是哪一位：</div>' + pickIdentifyUI('knight','騎士');
+    html += '<div class="small muted" style="margin-top:8px;">如果有玩家說自己是騎士、要決鬥，先在下面標記是哪一位：</div>' + pickIdentifyUI('knight','有人說自己是騎士');
   }
   html += '</div>';
   return html;
@@ -1972,7 +1980,8 @@ function handleAction(act, el){
   if(act==='set-seat-role'){
     var n=Number(el.getAttribute('data-n'));
     var r=el.getAttribute('data-r')||null;
-    var applyRole=function(){ updateRole(n,{role:r}); ui.pickSeatRole=null; render(); };
+    // 不管這個座位原本有沒有開手機入座，標記身份就視同入座，座位管理才不會卡在「只能改名字」。
+    var applyRole=function(){ updateRole(n,{role:r}); updateSeat(n,{occupied:true}); ui.pickSeatRole=null; render(); };
     if(r){
       // 名額已經滿了的話，把身份從原本持有的座位搬過來，這樣才能真的「換身份」
       var need=roleConfigCounts()[r]||0;
@@ -1988,14 +1997,7 @@ function handleAction(act, el){
   if(act==='update-seat-nick'){
     var n=Number(el.getAttribute('data-n'));
     var nick=(($app.querySelector('#editSeatNick')||{}).value||'').trim();
-    updateSeat(n,{nickname:nick});
-    return;
-  }
-  if(act==='manual-claim-seat'){
-    var n=Number(el.getAttribute('data-n'));
-    var nick=(($app.querySelector('#manualSeatNick')||{}).value||'').trim();
-    setSeat(n,{seatNumber:n,occupied:true,nickname:nick,alive:true});
-    ui.pickSeatRole=null; render();
+    updateSeat(n,{nickname:nick, occupied:true});
     return;
   }
   if(act==='night-skip'){ nightAdvance(); return; }
@@ -2011,6 +2013,21 @@ function handleAction(act, el){
   if(act==='resolve-night'){ resolveNight(); return; }
   if(act==='pending-shoot'){ actPendingShoot(Number(el.getAttribute('data-n'))); return; }
   if(act==='assign-role-quick'){ actAssignRoleQuick(Number(el.getAttribute('data-n')), el.getAttribute('data-r')); return; }
+  if(act==='toggle-wolf-identify'){
+    var n=Number(el.getAttribute('data-n'));
+    var picked=(ui.wolfIdentifyPicked||[]).slice();
+    var i=picked.indexOf(n);
+    if(i>=0) picked.splice(i,1); else picked.push(n);
+    ui.wolfIdentifyPicked=picked; render();
+    return;
+  }
+  if(act==='confirm-wolf-identify'){
+    var picked=ui.wolfIdentifyPicked||[];
+    Promise.all(picked.map(function(n){ return updateRole(n,{role:'wolf'}); })).then(function(){
+      ui.wolfIdentifyPicked=null; render();
+    });
+    return;
+  }
   if(act==='assign-death-role'){ actAssignDeathRole(Number(el.getAttribute('data-n')), el.getAttribute('data-r')); return; }
 
   if(act==='toggle-candidate'){
