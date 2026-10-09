@@ -352,6 +352,23 @@ async function boot(){
   render();
 }
 boot();
+
+/* ============ 自動更新 ============
+   GitHub Pages 讓瀏覽器把頁面暫存 10 分鐘，玩家常常拿到舊版。這裡每分鐘（和切回這個分頁時）
+   繞過暫存抓一次最新的頁面，APP_BUILD 不一樣就自動重新整理。
+   ※ 每次修改後要記得把 APP_BUILD 改成新的值，不然不會觸發更新。 */
+var APP_BUILD = '2026-10-10-1';
+function checkForUpdate(){
+  if(document.activeElement && document.activeElement.tagName==='INPUT') return;   // 正在打字就先不要刷新
+  fetch(location.pathname+'?_='+Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
+    var m = t.match(/var APP_BUILD = '([^']+)'/);
+    if(m && m[1]!==APP_BUILD) location.reload();
+  }).catch(function(){});
+}
+if(location.protocol.indexOf('http')===0){
+  setInterval(checkForUpdate, 60000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkForUpdate(); });
+}
 setTimeout(function(){ if(dbStatus==='connecting'){ dbStatus='unavailable'; render(); } },10500);
 
 /* ============ 小工具 ============ */
