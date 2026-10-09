@@ -95,6 +95,7 @@
   /* 投票選項：固定 4 欄 × 3 列，每格同高；棄票獨佔最後一整列，不會撐高某一列 */
   .vote-pick{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;}
   .vote-pick .btn{height:52px;padding:0;font-size:20px;white-space:nowrap;}
+  .vote-pick .btn.wide{grid-column:span 2;font-size:17px;}
 
   .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px;border:2px solid var(--border);transform:rotate(-2deg);}
   .badge-wolf{background:var(--accent-wolf-soft);color:var(--accent-wolf);border-color:var(--accent-wolf);}
@@ -457,18 +458,24 @@ function choiceCard(ic,title,desc,mode){
 
 /* ============ 投票模式 ============
    沒有計票員：每台裝置點進來先自己選號碼（1–12，不能重複）或選「旁觀」。
-   12 個座位全部登錄後自動開放投票；每人選好對象按「確定」後就鎖定，
-   12 人都投完之前不顯示任何人投給誰，全部投完才在面板上公布「幾號 → 幾號」。
-   資料：pureSeats/{1..12} = {seatNumber, occupied, deviceId}；
-         pure/state = {round, choices:{座位: 目標座位，0 代表棄票}}。 */
+   入座就能投票，不用等 12 人到齊；每人選好對象按「確定」後就鎖定。
+   「該投票的人」＝已入座且沒出局的座位，這些人都投完（或有人按提前公布）之前
+   不顯示任何人投給誰，公布時才在面板上顯示「幾號 → 幾號」。
+   出局只能由座位本人的裝置自己標記，別人改不到。
+   資料：pureSeats/{1..12} = {seatNumber, occupied, deviceId, dead}；
+         pure/state = {round, choices:{座位: 目標座位，0 棄票，-1 沒有投票權}, revealed}。 */
 var PURE_SEATS = 12;
 function pureSeatNums(){ return rangeArr(1,PURE_SEATS); }
 function pureSeatTaken(n){ var s=state.pureSeats[String(n)]; return !!(s&&s.occupied); }
-function pureOccupiedCount(){ return pureSeatNums().filter(pureSeatTaken).length; }
+function pureSeatDead(n){ var s=state.pureSeats[String(n)]; return !!(s&&s.occupied&&s.dead); }
 function pureRound(){ return (state.pure&&state.pure.round)||1; }
 function pureChoices(){ return (state.pure&&state.pure.choices)||{}; }
-function pureVotedCount(){ var c=pureChoices(); return pureSeatNums().filter(function(n){return c[String(n)]!=null;}).length; }
-function pureAllVoted(){ return pureVotedCount()===PURE_SEATS; }
+function pureVoters(){ return pureSeatNums().filter(function(n){ return pureSeatTaken(n) && !pureSeatDead(n); }); }
+function pureRoundDone(){
+  if(state.pure&&state.pure.revealed) return true;
+  var c=pureChoices(), v=pureVoters();
+  return v.length>0 && v.every(function(n){ return c[String(n)]!=null; });
+}
 /* 這台裝置目前登錄的座位：座位文件要存在、而且是這台裝置搶到的才算，
    否則（例如有人按了重置房間）就視為沒有座位。 */
 function myPureSeat(){
@@ -498,63 +505,73 @@ function renderPurePicker(){
 
 function renderPureBoard(){
   var me = myPureSeat();
-  var occ = pureOccupiedCount();
   var choices = pureChoices();
-  var allVoted = pureAllVoted();
-  var voting = !allVoted && occ===PURE_SEATS;
+  var voters = pureVoters();
+  var done = pureRoundDone();
   var html = '';
 
-  // 座位面板：登錄階段顯示誰還沒登錄；投票階段只顯示「已投／未投」，不顯示投給誰。
+  // 座位面板：投票中只顯示「已投／未投」，不顯示投給誰。
   var cells = pureSeatNums().map(function(n){
-    var taken = pureSeatTaken(n);
+    var taken = pureSeatTaken(n), dead = pureSeatDead(n);
     var voted = choices[String(n)]!=null;
-    var sub = !taken ? '未登錄' : (voting ? (voted?'✓ 已投':'投票中') : '已登錄');
-    var cls = 'seat'+(!taken?' empty':'')+(n===me?' me':'')+(voting&&voted?' voted':'');
+    var sub = !taken ? '未入座' : (dead ? '已出局' : (done ? '已入座' : (voted?'✓ 已投':'投票中')));
+    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(!done&&voted&&!dead?' voted':'');
     return '<div class="'+cls+'"><div class="num mono">'+n+'</div><div class="nick">'+sub+'</div></div>';
   }).join('');
-  var badge = allVoted ? '<span class="badge badge-wolf">已公布</span>'
-    : (voting ? '<span class="badge badge-good">投票中 '+pureVotedCount()+'/'+PURE_SEATS+'</span>'
-              : '<span class="badge badge-muted">入座 '+occ+'/'+PURE_SEATS+'</span>');
+  var votedN = voters.filter(function(n){return choices[String(n)]!=null;}).length;
+  var badge = done ? '<span class="badge badge-wolf">已公布</span>'
+    : (voters.length ? '<span class="badge badge-good">已投 '+votedN+'/'+voters.length+'</span>'
+                     : '<span class="badge badge-muted">等待入座</span>');
   html += '<div class="card stack"><div class="row between"><h2>第 '+pureRound()+' 輪投票</h2>'+badge+'</div>'
     + '<div class="seat-grid">'+cells+'</div></div>';
 
-  if(allVoted){
+  if(done){
+    var notVoted = voters.filter(function(n){return choices[String(n)]==null;});
     html += '<div class="card stack"><h2>投票結果</h2>'
       + renderVoteBreakdown({choices:choices, open:false})
+      + (notVoted.length ? '<div class="vote-breakdown-row pending"><span class="small muted">提前公布，未投票：'+notVoted.join('、')+' 號</span></div>' : '')
       + '<button class="btn btn-primary btn-block" data-act="pure-next-round" data-round="'+pureRound()+'" data-confirm="確定要清除這一輪的結果，開始第 '+(pureRound()+1)+' 輪投票嗎？">開始下一輪投票</button>'
       + '</div>';
-  } else if(!voting){
-    var missing = pureSeatNums().filter(function(n){return !pureSeatTaken(n);});
-    html += '<div class="card stack"><h2>等待玩家入座</h2>'
-      + '<p>還沒登錄的號碼：<b class="mono">'+missing.join('、')+'</b> 號</p>'
-      + '<p class="small muted">12 個座位都登錄後會自動開始投票。</p>'
-      + (pureVotedCount()>0 ? '<p class="small muted">本輪已有 '+pureVotedCount()+' 人投票，座位補滿後繼續。</p>' : '')
-      + '</div>';
+  } else if(!voters.length){
+    html += '<div class="card stack"><h2>等待玩家入座</h2><p class="small muted">有人入座後就可以開始投票。</p></div>';
+  } else if(me!=null && pureSeatDead(me)){
+    html += '<div class="card stack"><h2>你已出局，不能投票</h2><p class="small muted">投票結果會跟其他人同時公布。</p></div>';
   } else if(me!=null && choices[String(me)]==null){
     var sel = ui.pureSel;
     var btns = pureSeatNums().map(function(n){
       return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'">'+n+'</button>';
-    }).join('') + '<button class="btn'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0" style="grid-column:1/-1;">棄票</button>';
+    }).join('')
+      + '<button class="btn wide'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0">棄票</button>'
+      + '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">沒有投票權</button>';
+    var confirmLabel = sel==null ? '請先選擇' : (sel===0 ? '確定棄票' : (sel===-1 ? '確定這輪沒有投票權' : '確定投給 '+sel+' 號'));
     html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
       + '<div class="vote-pick">'+btns+'</div>'
-      + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'
-      + (sel==null ? '請先選擇' : '確定'+(sel===0?'棄票':'投給 '+sel+' 號')) + '</button>'
-      + '<p class="small muted">按下確定後就不能更改。</p>'
+      + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'+confirmLabel+'</button>'
+      + '<p class="small muted">按下確定後就不能更改。上警等這輪不能投票的情況，請選「沒有投票權」。</p>'
       + '</div>';
   } else {
     var mine = me!=null ? choices[String(me)] : null;
-    var pending = pureSeatNums().filter(function(n){return choices[String(n)]==null;});
-    html += '<div class="card stack"><h2>'+(me!=null?'你已'+(mine===0?'棄票':'投給 '+mine+' 號'):'投票進行中')+'</h2>'
+    var pending = voters.filter(function(n){return choices[String(n)]==null;});
+    var title = me==null ? '投票進行中' : (mine===0 ? '你已棄票' : (mine===-1 ? '你這輪沒有投票權' : '你已投給 '+mine+' 號'));
+    html += '<div class="card stack"><h2>'+title+'</h2>'
       + '<p class="muted">等所有人都投完票才會公布結果。</p>'
       + '<p class="small muted">尚未投票：'+pending.join('、')+' 號</p>'
       + '</div>';
   }
+  if(!done && votedN>0){
+    html += '<button class="btn btn-ghost btn-block" data-act="pure-reveal" data-round="'+pureRound()+'" data-confirm="還有人沒投票，確定要提前公布結果嗎？公布後這一輪就不能再投票。">提前公布結果</button>';
+  }
 
-  html += '<div class="row">'
-    + (me!=null
-        ? '<button class="btn btn-ghost btn-block" data-act="pure-leave" data-confirm="確定要離開 '+me+' 號座位嗎？離開後這個號碼會空出來給別人選。">離開座位</button>'
-        : '<button class="btn btn-ghost btn-block" data-act="pure-leave">改選號碼入座</button>')
-    + '<button class="btn btn-ghost btn-block" data-act="pure-reset" data-confirm="重置會清空所有人的座位與本輪投票，大家都要重新選號碼。確定要重置嗎？">重置房間</button>'
+  html += '<div class="row">';
+  if(me!=null){
+    html += pureSeatDead(me)
+      ? '<button class="btn btn-ghost btn-block" data-act="pure-dead" data-v="0" data-confirm="確定要取消 '+me+' 號的出局狀態嗎？">取消出局</button>'
+      : '<button class="btn btn-ghost btn-block" data-act="pure-dead" data-v="1" data-confirm="確定 '+me+' 號已經出局了嗎？出局後之後每一輪都不會再等你投票。">我已出局</button>';
+    html += '<button class="btn btn-ghost btn-block" data-act="pure-leave" data-confirm="確定要離開 '+me+' 號座位嗎？離開後這個號碼會空出來給別人選。">離開座位</button>';
+  } else {
+    html += '<button class="btn btn-ghost btn-block" data-act="pure-leave">改選號碼入座</button>';
+  }
+  html += '<button class="btn btn-ghost btn-block" data-act="pure-reset" data-confirm="重置會清空所有人的座位與本輪投票，大家都要重新選號碼。確定要重置嗎？">重置房間</button>'
     + '</div>';
   return html;
 }
@@ -1704,13 +1721,15 @@ function renderVoteBreakdown(v){
   var groups = {};
   Object.keys(choices).forEach(function(seat){
     var target = choices[seat];
-    var key = (target===0 || target==null) ? 'abstain' : String(target);
+    var key = target===-1 ? 'noright' : ((target===0 || target==null) ? 'abstain' : String(target));
     (groups[key]=groups[key]||[]).push(Number(seat));
   });
   var keys = Object.keys(groups);
   var html = '';
   if(keys.length){
     keys.sort(function(a,b){
+      if(a==='noright') return 1;
+      if(b==='noright') return -1;
       if(a==='abstain') return 1;
       if(b==='abstain') return -1;
       return (tally[Number(b)]||0)-(tally[Number(a)]||0);
@@ -1718,6 +1737,9 @@ function renderVoteBreakdown(v){
     html += '<div class="stack" style="margin-top:2px;">' + keys.map(function(k){
       var voters = groups[k].slice().sort(function(a,b){return a-b;});
       var voterStr = voters.join('、')+' 號';
+      if(k==='noright'){
+        return '<div class="vote-breakdown-row abstain"><span class="small muted">無投票權：'+voterStr+'</span></div>';
+      }
       if(k==='abstain'){
         return '<div class="vote-breakdown-row abstain"><span class="mono">'+voterStr+'</span><span class="arrow">→</span><span class="badge badge-muted">棄票・'+fmtWeight(tally[0]||0)+' 票</span></div>';
       }
@@ -1920,7 +1942,7 @@ function handleAction(act, el){
     db.runTransaction(function(tx){
       return tx.get(ref).then(function(snap){
         var d=snap.exists?snap.data():{};
-        if((d.round||1)!==round) return false;
+        if((d.round||1)!==round || d.revealed) return false;
         var ch=Object.assign({}, d.choices||{});
         if(ch[String(me)]!=null) return false;
         ch[String(me)]=target;
@@ -1928,6 +1950,23 @@ function handleAction(act, el){
         return true;
       });
     }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過或已進入下一輪），請看畫面上的最新狀態。'); });
+    return;
+  }
+  if(act==='pure-reveal'){
+    var round=Number(el.getAttribute('data-round'));
+    var ref=db.doc('pure/state');
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(snap){
+        var d=snap.exists?snap.data():{};
+        if((d.round||1)!==round) return;
+        tx.set(ref,{round:round, choices:d.choices||{}, revealed:true});
+      });
+    });
+    return;
+  }
+  if(act==='pure-dead'){
+    var mine=myPureSeat();
+    if(mine!=null){ db.collection('pureSeats').doc(String(mine)).update({dead: el.getAttribute('data-v')==='1'}); }
     return;
   }
   if(act==='pure-next-round'){
