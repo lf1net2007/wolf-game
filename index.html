@@ -133,6 +133,8 @@
     display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1;
     transform:rotate(14deg); box-shadow:2px 2px 0 var(--border);
   }
+  .seat.taken{opacity:.4;cursor:not-allowed;box-shadow:none;}
+  .seat.voted{background:var(--accent-good-soft);}
   .seat.selected{border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);}
 
   .step{border-left:3px solid var(--border);padding:3px 0 3px 16px;position:relative;font-weight:500;}
@@ -295,6 +297,8 @@ var ui={
   role: LS.get('ww_role', null),      // 'god' | 'player'
   seat: LS.get('ww_seat_full', null),
   pureSeat: LS.get('ww_seat_pure', null),
+  pureSpectator: LS.get('ww_pure_spectator', false),
+  pureSel: null,      // 投票時還沒按「確定」前的暫選對象
   pinBuf:'',
   view:'main',
   nickDraft:'',
@@ -303,9 +307,13 @@ var ui={
   speakDraft:null
 };
 
+// 每台裝置一組隨機 id，用來確認「這個座位是不是我搶到的」
+var DEVICE_ID = LS.get('ww_device_id', null);
+if(!DEVICE_ID){ DEVICE_ID = Math.random().toString(36).slice(2)+Date.now().toString(36); LS.set('ww_device_id', DEVICE_ID); }
+
 var dbStatus='connecting'; // connecting | ok | unavailable
 var db=null;
-var state={ game:null, seats:{}, roles:{}, nightlog:{}, votes:{}, pure:null, pureSeats:{}, pureVotes:{} };
+var state={ game:null, seats:{}, roles:{}, nightlog:{}, votes:{}, pure:null, pureSeats:{}, pureLoaded:false };
 
 var $app=document.getElementById('app');
 
@@ -329,8 +337,7 @@ async function boot(){
   db.collection('nightlog').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.nightlog=m; render(); });
   db.collection('votes').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.votes=m; render(); });
   db.doc('pure/state').onSnapshot(function(s){ state.pure=s.exists?s.data():null; render(); });
-  db.collection('pureSeats').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.pureSeats=m; render(); });
-  db.collection('pureVotes').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.pureVotes=m; render(); });
+  db.collection('pureSeats').onSnapshot(function(qs){ var m={}; qs.docs.forEach(function(d){m[d.id]=d.data();}); state.pureSeats=m; state.pureLoaded=true; render(); });
   render();
 }
 boot();
@@ -386,7 +393,7 @@ function render(){
 
 /* ============ Topbar ============ */
 function phaseLabel(){
-  if(ui.mode==='pure') return '純投票模式';
+  if(ui.mode==='pure') return '投票';
   if(!state.game) return '尚未開局';
   if(state.game.winner) return (state.game.winner==='wolf'?'狼人陣營':'好人陣營')+' 獲勝';
   if(state.game.phase==='lobby') return '籌備中';
@@ -394,12 +401,19 @@ function phaseLabel(){
   if(state.game.phase==='day') return '第 '+state.game.dayNumber+' 天 · 白天';
   return '';
 }
+function topbarIdentity(){
+  if(ui.mode==='pure'){
+    if(myPureSeat()!=null) return myPureSeat()+' 號玩家';
+    return ui.pureSpectator ? '👁️ 旁觀者' : '尚未選號';
+  }
+  return ui.role==='god'?'上帝視角':'圍觀 / 玩家';
+}
 function renderTopbar(){
   var dotCls = dbStatus==='ok' ? 'ok' : (dbStatus==='connecting' ? 'pending' : 'bad');
   var dotTitle = dbStatus==='ok' ? '資料已連線' : (dbStatus==='connecting' ? '連線中…' : '無法連線資料庫');
   return '<div class="topbar">'
     + '<span class="dot '+dotCls+'" title="'+dotTitle+'"></span>'
-    + '<div class="phase"><div class="label">'+(ui.role==='god'?'上帝視角':'圍觀 / 玩家')+'</div><div class="value">'+esc(phaseLabel())+'</div></div>'
+    + '<div class="phase"><div class="label">'+esc(topbarIdentity())+'</div><div class="value">'+esc(phaseLabel())+'</div></div>'
     + '<button class="iconbtn" data-act="home">切換</button>'
     + '</div>';
 }
@@ -415,7 +429,7 @@ function renderBody(){
   }
   if(!ui.mode || ui.view==='mode-select'){ return renderModeSelect(); }
   if(ui.mode==='pure'){ return renderPureMode(); }
-  return renderFullMode();
+  return renderModeSelect();
 }
 
 function renderConfirmScreen(){
@@ -427,10 +441,10 @@ function renderConfirmScreen(){
 
 /* ============ 首頁：選模式 ============ */
 function renderModeSelect(){
-  var html = '<div class="home-hero"><div class="moon">🐺🌙</div><h1>狼人殺主持台</h1><p>上帝導讀、身分紀錄、上警投票，一支手機到底。</p></div>';
+  var html = '<div class="home-hero"><div class="moon">🐺🌙</div><h1>狼人殺主持台</h1><p>每人一支手機，匿名投票、同時公布。</p></div>';
   html += '<div class="choice">';
-  html += choiceCard('🎬','完整遊戲模式','角色配置、夜晚睜眼導讀、上警與放逐投票、勝負判定。','full');
-  html += choiceCard('🗳️','純投票模式','跳過角色與夜晚流程，只需要座位與計票，備援用。','pure');
+  // 完整遊戲模式（角色/夜晚導讀/上警）目前依使用者要求隱藏入口，程式碼保留未刪。
+  html += choiceCard('🗳️','投票','選好自己的號碼，12 人到齊後開始投票，全部投完才公布結果。','pure');
   html += '</div>';
   return html;
 }
@@ -439,30 +453,107 @@ function choiceCard(ic,title,desc,mode){
     + '<div class="ic">'+ic+'</div><div><h3>'+title+'</h3><p>'+desc+'</p></div></button>';
 }
 
-/* ============ 純投票模式 ============ */
-function pureTotalSeats(){ return (state.pure&&state.pure.totalSeats)||0; }
-function pureSeatData(n){ return state.pureSeats[String(n)]||{seatNumber:n,occupied:false}; }
-function pureLatestVoteId(){ return state.pure&&state.pure.activeVoteId; }
+/* ============ 投票模式 ============
+   沒有計票員：每台裝置點進來先自己選號碼（1–12，不能重複）或選「旁觀」。
+   12 個座位全部登錄後自動開放投票；每人選好對象按「確定」後就鎖定，
+   12 人都投完之前不顯示任何人投給誰，全部投完才在面板上公布「幾號 → 幾號」。
+   資料：pureSeats/{1..12} = {seatNumber, occupied, deviceId}；
+         pure/state = {round, choices:{座位: 目標座位，0 代表棄票}}。 */
+var PURE_SEATS = 12;
+function pureSeatNums(){ return rangeArr(1,PURE_SEATS); }
+function pureSeatTaken(n){ var s=state.pureSeats[String(n)]; return !!(s&&s.occupied); }
+function pureOccupiedCount(){ return pureSeatNums().filter(pureSeatTaken).length; }
+function pureRound(){ return (state.pure&&state.pure.round)||1; }
+function pureChoices(){ return (state.pure&&state.pure.choices)||{}; }
+function pureVotedCount(){ var c=pureChoices(); return pureSeatNums().filter(function(n){return c[String(n)]!=null;}).length; }
+function pureAllVoted(){ return pureVotedCount()===PURE_SEATS; }
+/* 這台裝置目前登錄的座位：座位文件要存在、而且是這台裝置搶到的才算，
+   否則（例如有人按了重置房間）就視為沒有座位。 */
+function myPureSeat(){
+  if(ui.pureSeat==null) return null;
+  var s=state.pureSeats[String(ui.pureSeat)];
+  return (s && s.occupied && s.deviceId===DEVICE_ID) ? ui.pureSeat : null;
+}
 
 function renderPureMode(){
-  if(!ui.role){
-    return backRow('mode-select') + '<div class="choice">'
-      + choiceCard('🎙️','我是計票員','建立座位、發起投票、公布結果。','__pure_god')
-      + choiceCard('🙋','我是玩家','入座並參與投票。','__pure_player')
+  if(!state.pureLoaded){ return '<div class="card"><p class="muted">連線中…</p></div>'; }
+  if(myPureSeat()==null && !ui.pureSpectator){ return renderPurePicker(); }
+  return renderPureBoard();
+}
+
+function renderPurePicker(){
+  var cells = pureSeatNums().map(function(n){
+    var taken = pureSeatTaken(n);
+    return '<div class="seat'+(taken?' taken':'')+'"'+(taken?'':' data-act="pure-claim" data-n="'+n+'"')+'>'
+      + '<div class="num mono">'+n+'</div><div class="nick">'+(taken?'已登錄':'可選')+'</div></div>';
+  }).join('');
+  return '<div class="card stack"><h2>請點選你的號碼</h2>'
+    + '<p class="small muted">已經被別人登錄的號碼不能再選。</p>'
+    + '<div class="seat-grid">'+cells+'</div>'
+    + '<button class="btn btn-block" data-act="pure-spectate">👁️ 我是旁觀者</button>'
+    + '</div>';
+}
+
+function renderPureBoard(){
+  var me = myPureSeat();
+  var occ = pureOccupiedCount();
+  var choices = pureChoices();
+  var allVoted = pureAllVoted();
+  var voting = !allVoted && occ===PURE_SEATS;
+  var html = '';
+
+  // 座位面板：登錄階段顯示誰還沒登錄；投票階段只顯示「已投／未投」，不顯示投給誰。
+  var cells = pureSeatNums().map(function(n){
+    var taken = pureSeatTaken(n);
+    var voted = choices[String(n)]!=null;
+    var sub = !taken ? '未登錄' : (voting ? (voted?'✓ 已投':'投票中') : '已登錄');
+    var cls = 'seat'+(!taken?' empty':'')+(n===me?' me':'')+(voting&&voted?' voted':'');
+    return '<div class="'+cls+'"><div class="num mono">'+n+'</div><div class="nick">'+sub+'</div></div>';
+  }).join('');
+  var badge = allVoted ? '<span class="badge badge-wolf">已公布</span>'
+    : (voting ? '<span class="badge badge-good">投票中 '+pureVotedCount()+'/'+PURE_SEATS+'</span>'
+              : '<span class="badge badge-muted">入座 '+occ+'/'+PURE_SEATS+'</span>');
+  html += '<div class="card stack"><div class="row between"><h2>第 '+pureRound()+' 輪投票</h2>'+badge+'</div>'
+    + '<div class="seat-grid">'+cells+'</div></div>';
+
+  if(allVoted){
+    html += '<div class="card stack"><h2>投票結果</h2>'
+      + renderVoteBreakdown({choices:choices, open:false})
+      + '<button class="btn btn-primary btn-block" data-act="pure-next-round" data-round="'+pureRound()+'" data-confirm="確定要清除這一輪的結果，開始第 '+(pureRound()+1)+' 輪投票嗎？">開始下一輪投票</button>'
+      + '</div>';
+  } else if(!voting){
+    var missing = pureSeatNums().filter(function(n){return !pureSeatTaken(n);});
+    html += '<div class="card stack"><h2>等待玩家入座</h2>'
+      + '<p>還沒登錄的號碼：<b class="mono">'+missing.join('、')+'</b> 號</p>'
+      + '<p class="small muted">12 個座位都登錄後會自動開始投票。</p>'
+      + (pureVotedCount()>0 ? '<p class="small muted">本輪已有 '+pureVotedCount()+' 人投票，座位補滿後繼續。</p>' : '')
+      + '</div>';
+  } else if(me!=null && choices[String(me)]==null){
+    var sel = ui.pureSel;
+    var btns = pureSeatNums().map(function(n){
+      return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'">'+n+'</button>';
+    }).join('') + '<button class="btn'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0">棄票</button>';
+    html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
+      + '<div class="btngrid">'+btns+'</div>'
+      + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'
+      + (sel==null ? '請先選擇' : '確定'+(sel===0?'棄票':'投給 '+sel+' 號')) + '</button>'
+      + '<p class="small muted">按下確定後就不能更改。</p>'
+      + '</div>';
+  } else {
+    var mine = me!=null ? choices[String(me)] : null;
+    var pending = pureSeatNums().filter(function(n){return choices[String(n)]==null;});
+    html += '<div class="card stack"><h2>'+(me!=null?'你已'+(mine===0?'棄票':'投給 '+mine+' 號'):'投票進行中')+'</h2>'
+      + '<p class="muted">等所有人都投完票才會公布結果。</p>'
+      + '<p class="small muted">尚未投票：'+pending.join('、')+' 號</p>'
       + '</div>';
   }
-  if(ui.role==='__pure_god_pending'){}
-  var html = backRow('mode-select', switchIdentityBtn());
-  if(!state.pure || !pureTotalSeats()){
-    if(ui.role==='pureplayer'){ return html+'<div class="card"><p class="muted">計票員還沒建立座位，請稍候。</p></div>'; }
-    return html + renderPureSetup();
-  }
-  if(ui.role==='puregod'){
-    html += renderPureGodPanel();
-  } else {
-    html += renderPureSeatBoard(true);
-    html += renderPureVoteView(false);
-  }
+
+  html += '<div class="row">'
+    + (me!=null
+        ? '<button class="btn btn-ghost btn-block" data-act="pure-leave" data-confirm="確定要離開 '+me+' 號座位嗎？離開後這個號碼會空出來給別人選。">離開座位</button>'
+        : '<button class="btn btn-ghost btn-block" data-act="pure-leave">改選號碼入座</button>')
+    + '<button class="btn btn-ghost btn-block" data-act="pure-reset" data-confirm="重置會清空所有人的座位與本輪投票，大家都要重新選號碼。確定要重置嗎？">重置房間</button>'
+    + '</div>';
   return html;
 }
 function switchIdentityBtn(){ return '<button class="iconbtn" data-act="switch-identity">切換身分</button>'; }
@@ -470,45 +561,6 @@ function backRow(target,right){
   return '<div class="row between" style="margin-bottom:-4px;"><button class="iconbtn" data-act="goto" data-view="'+target+'">← 返回</button>'+(right||'')+'</div>';
 }
 
-function renderPureSetup(){
-  var n = ui.setupDraft && ui.setupDraft.pureSeats || 8;
-  return '<div class="card stack">'
-    + '<h2>建立純投票房間</h2>'
-    + '<div class="field"><label>座位數量</label>'
-    + '<div class="stepper-ctrl"><button data-act="pure-n" data-d="-1">－</button><div class="n mono">'+n+'</div><button data-act="pure-n" data-d="1">＋</button></div></div>'
-    + '<button class="btn btn-primary btn-block" data-act="pure-create" data-n="'+n+'">建立並開始</button>'
-    + '</div>';
-}
-function renderPureSeatBoard(withClaim){
-  var n=pureTotalSeats(); var cells='';
-  for(var i=1;i<=n;i++){
-    var s=pureSeatData(i);
-    var isMe = ui.pureSeat===i;
-    var cls='seat'+(!s.occupied?' empty':'')+(isMe?' me':'');
-    cells += '<div class="'+cls+'" '+(withClaim&&!s.occupied?'data-act="pure-claim" data-n="'+i+'"':'')+'>'
-      + '<div class="num mono">'+i+'</div><div class="nick">'+(s.occupied?esc(s.nickname||'已入座'):'空位')+'</div></div>';
-  }
-  return '<div class="card stack"><h2>座位</h2><div class="seat-grid">'+cells+'</div>'
-    + (withClaim && ui.pureSeat==null ? '<p class="small muted">點空位入座；入座後這台裝置就代表你這個座位。</p>' : '')
-    + '</div>';
-}
-function renderPureGodPanel(){
-  var html = renderPureSeatBoard(false);
-  html += '<div class="card stack"><h2>發起投票</h2>'
-    + '<div class="field"><label>投票標題（例如：第 3 天放逐投票）</label><input type="text" id="pureVoteLabel" placeholder="放逐投票"></div>';
-  if(state.pure && state.pure.sheriffSeat!=null){
-    html += '<div class="small muted">目前警長：'+state.pure.sheriffSeat+' 號，歸票時算 1.5 票。</div>';
-  } else {
-    html += '<div class="small muted">尚未指定警長，所有票數皆為 1 票。</div>';
-  }
-  html += '<div class="field"><label>指定警長座位（再點一次取消）</label>'
-    + '<div class="btngrid">'+seatPickButtons(rangeArr(1,pureTotalSeats()),'pure-set-sheriff', state.pure&&state.pure.sheriffSeat)+'</div></div>';
-  html += '<button class="btn btn-primary btn-block" data-act="pure-start-vote">開始新一輪投票</button>';
-  html += '<button class="btn btn-ghost btn-block" data-act="pure-reset">重新設定座位人數</button>';
-  html += '</div>';
-  html += renderPureVoteView(true);
-  return html;
-}
 function toggleSwitch(key,on){ return '<span class="switch'+(on?' on':'')+'" data-act="toggle" data-key="'+key+'"></span>'; }
 function rangeArr(a,b){ var r=[]; for(var i=a;i<=b;i++)r.push(i); return r; }
 function seatPickButtons(list,act,selected,extraData){
@@ -518,41 +570,6 @@ function seatPickButtons(list,act,selected,extraData){
   }).join('');
 }
 
-function renderPureVoteView(isGod){
-  var vid = pureLatestVoteId();
-  if(!vid || !state.pureVotes[vid]){
-    return '<div class="card"><p class="muted">目前沒有進行中的投票。</p></div>';
-  }
-  var v = state.pureVotes[vid];
-  var eligible = rangeArr(1,pureTotalSeats()).filter(function(n){return pureSeatData(n).occupied;});
-  var html='<div class="card stack"><div class="row between"><h2>'+esc(v.label||'投票')+'</h2>'+(v.open?'<span class="badge badge-good">進行中</span>':'<span class="badge badge-muted">已結束</span>')+'</div>';
-  if(isGod && v.sheriffSeat!=null){
-    html += '<label class="toggle-row"><span><span class="t-label">警長歸票（算 1.5 票）</span><br><span class="t-desc">警長（'+v.sheriffSeat+'號）口頭宣告投給誰後再勾選</span></span>'+toggleSwitch('sheriffDeclare:'+v.id, v.sheriffDeclared)+'</label>';
-  }
-  if(v.open && !isGod && ui.pureSeat!=null){
-    html += '<div class="btngrid">' + eligible.map(function(n){
-        var mine = v.choices && v.choices[ui.pureSeat]===n;
-        return '<button class="btn btn-sm'+(mine?' btn-wolf':'')+'" data-act="pure-vote" data-target="'+n+'">'+n+'</button>';
-      }).join('')
-      + '<button class="btn btn-sm'+(v.choices&&v.choices[ui.pureSeat]===0?' btn-wolf':'')+'" data-act="pure-vote" data-target="0">棄票</button>'
-      + '</div>';
-  }
-  // 跟完整模式一樣：投票過程中只有計票員看得到明細，玩家要等投票結束才看得到。
-  if(isGod || !v.open){
-    html += renderVoteBreakdown(v);
-  } else {
-    html += '<p class="small muted" style="margin-top:4px;">投票結果會在投票結束後公布，請耐心等候。</p>';
-  }
-  if(v.open && ui.pureSeat!=null){
-    var mineChoice = v.choices && v.choices[ui.pureSeat];
-    html += '<p class="small muted">你目前是 '+ui.pureSeat+' 號座位'+(mineChoice!=null?(mineChoice===0?'，已選擇棄票':'，已投給 '+mineChoice+' 號'):'，尚未投票')+'。</p>';
-  }
-  if(isGod && v.open){
-    html += '<button class="btn btn-wolf btn-block" data-act="pure-close-vote">投票結束</button>';
-  }
-  html += '</div>';
-  return html;
-}
 function tallyOf(v){
   var t={}; var choices=v.choices||{};
   Object.keys(choices).forEach(function(seat){
@@ -1869,60 +1886,68 @@ function handleAction(act, el){
   if(act==='goto'){ ui.view=el.getAttribute('data-view'); render(); return; }
   if(act==='pick-mode'){
     var m=el.getAttribute('data-mode');
-    if(m==='full'||m==='pure'){ ui.mode=m; LS.set('ww_mode',m); ui.view='main'; render(); return; }
-    if(m==='__pure_god'){ ui.role='puregod'; render(); return; }
-    if(m==='__pure_player'){ ui.role='pureplayer'; render(); return; }
+    if(m==='pure'){ ui.mode=m; LS.set('ww_mode',m); ui.view='main'; render(); return; }
     if(m==='__full_god'){ ui.role='fullgod'; render(); return; }
     if(m==='__full_player'){ ui.role='fullplayer'; render(); return; }
   }
   if(act==='switch-identity'){ ui.role=null; render(); return; }
 
-  if(act==='pure-n'){
-    var d=Number(el.getAttribute('data-d'));
-    ui.setupDraft=ui.setupDraft||{}; ui.setupDraft.pureSeats=Math.max(2,Math.min(30,(ui.setupDraft.pureSeats||8)+d)); render(); return;
-  }
-  if(act==='pure-create'){
-    var n=Number(el.getAttribute('data-n'));
-    db.doc('pure/state').set({totalSeats:n, sheriffSeat:null, activeVoteId:null}); return;
-  }
   if(act==='pure-claim'){
     var n=Number(el.getAttribute('data-n'));
-    var nick=prompt('輸入暱稱（可留空）','')||'';
-    claimSeat('pureSeats', n, {seatNumber:n,occupied:true,nickname:nick}).then(function(res){
-      if(res.claimed){ ui.pureSeat=n; LS.set('ww_seat_pure',n); render(); }
-      else { alert('這個座位已經有人了，請選其他座位。'); }
+    claimSeat('pureSeats', n, {seatNumber:n,occupied:true,deviceId:DEVICE_ID}).then(function(res){
+      if(res.claimed){ ui.pureSeat=n; LS.set('ww_seat_pure',n); ui.pureSpectator=false; LS.set('ww_pure_spectator',false); ui.pureSel=null; render(); }
+      else { alert('這個號碼已經有人登錄了，請選其他號碼。'); }
     });
     return;
   }
-  if(act==='pure-set-sheriff'){
-    var n=Number(el.getAttribute('data-n'));
-    db.doc('pure/state').update({sheriffSeat: state.pure.sheriffSeat===n?null:n}); return;
+  if(act==='pure-spectate'){ ui.pureSpectator=true; LS.set('ww_pure_spectator',true); render(); return; }
+  if(act==='pure-leave'){
+    var mine=myPureSeat();
+    if(mine!=null){ db.collection('pureSeats').doc(String(mine)).delete(); }
+    ui.pureSeat=null; LS.set('ww_seat_pure',null);
+    ui.pureSpectator=false; LS.set('ww_pure_spectator',false);
+    ui.pureSel=null; render();
+    return;
+  }
+  if(act==='pure-select'){ ui.pureSel=Number(el.getAttribute('data-target')); render(); return; }
+  if(act==='pure-confirm-vote'){
+    var me=myPureSeat(); var target=ui.pureSel; var round=pureRound();
+    if(me==null || target==null) return;
+    var ref=db.doc('pure/state');
+    // 用交易寫入：已經投過就不能覆蓋，且這一輪如果剛好被別人開了下一輪就不寫入。
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(snap){
+        var d=snap.exists?snap.data():{};
+        if((d.round||1)!==round) return false;
+        var ch=Object.assign({}, d.choices||{});
+        if(ch[String(me)]!=null) return false;
+        ch[String(me)]=target;
+        tx.set(ref,{round:round, choices:ch});
+        return true;
+      });
+    }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過或已進入下一輪），請看畫面上的最新狀態。'); });
+    return;
+  }
+  if(act==='pure-next-round'){
+    var round=Number(el.getAttribute('data-round'));
+    var ref=db.doc('pure/state');
+    // 好幾個人同時按也只會進一輪
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(snap){
+        var d=snap.exists?snap.data():{};
+        if((d.round||1)!==round) return;
+        tx.set(ref,{round:round+1, choices:{}});
+      });
+    });
+    ui.pureSel=null;
+    return;
   }
   if(act==='pure-reset'){
     Object.keys(state.pureSeats).forEach(function(k){ db.collection('pureSeats').doc(k).delete(); });
-    db.doc('pure/state').set({totalSeats:0, sheriffSeat:null, activeVoteId:null});
-    ui.pureSeat=null; LS.set('ww_seat_pure',null); return;
-  }
-  if(act==='pure-start-vote'){
-    var label=($app.querySelector('#pureVoteLabel')||{}).value || '投票';
-    var eligible=rangeArr(1,pureTotalSeats()).filter(function(n){return pureSeatData(n).occupied;});
-    var id='pv-'+Date.now();
-    db.collection('pureVotes').doc(id).set({id:id,label:label,candidates:eligible,voters:eligible,sheriffSeat:state.pure.sheriffSeat,sheriffDeclared:true,choices:{},open:true,createdAt:nowIso()});
-    db.doc('pure/state').update({activeVoteId:id});
-    return;
-  }
-  if(act==='pure-vote'){
-    var target=Number(el.getAttribute('data-target'));
-    var vid=pureLatestVoteId();
-    if(ui.pureSeat==null){ alert('請先入座才能投票。'); return; }
-    var choices=Object.assign({}, state.pureVotes[vid].choices);
-    choices[ui.pureSeat]=target;
-    db.collection('pureVotes').doc(vid).update({choices:choices});
-    return;
-  }
-  if(act==='pure-close-vote'){
-    var vid=pureLatestVoteId();
-    db.collection('pureVotes').doc(vid).update({open:false});
+    db.doc('pure/state').set({round:1, choices:{}});
+    ui.pureSeat=null; LS.set('ww_seat_pure',null);
+    ui.pureSpectator=false; LS.set('ww_pure_spectator',false);
+    ui.pureSel=null;
     return;
   }
 
@@ -1947,9 +1972,8 @@ function handleAction(act, el){
     }
     if(key.indexOf('sheriffDeclare:')===0){
       var vid=key.slice(15);
-      var v=state.votes[vid]||state.pureVotes[vid];
-      var coll = state.votes[vid] ? 'votes' : 'pureVotes';
-      db.collection(coll).doc(vid).update({sheriffDeclared: !v.sheriffDeclared});
+      var v=state.votes[vid];
+      db.collection('votes').doc(vid).update({sheriffDeclared: !v.sheriffDeclared});
       return;
     }
   }
