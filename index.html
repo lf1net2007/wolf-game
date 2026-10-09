@@ -617,17 +617,19 @@ function renderPureBoard(){
     html += '<div class="card stack"><h2>你在第二階段 PK，這輪不能投票</h2><p class="small muted">PK：'+cands.join('、')+' 號。等其他人投完才會公布結果。</p></div>';
   } else if(me!=null && choices[String(me)]==null){
     var sel = ui.pureSel;
-    var allowed = kind==='normal' ? pureSeatNums().filter(function(n){return !pureSeatDead(n);}) : cands;
+    // 警長環節還沒結束、也還沒人上警時，只能按「我要競選警長」，要有人上警才可以開始投票
+    var waitCand = kind==='normal' && !d.sheriffDone;
+    var allowed = waitCand ? [] : (kind==='normal' ? pureSeatNums().filter(function(n){return !pureSeatDead(n);}) : cands);
     var btns = pureSeatNums().map(function(n){
       var ok = allowed.indexOf(n)>=0;
       return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'"'+(ok?'':' disabled')+'>'+n+'</button>';
     }).join('')
-      + '<button class="btn wide'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0">棄票</button>'
+      + '<button class="btn wide'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0"'+(waitCand?' disabled':'')+'>棄票</button>'
       + (kind==='pk' || d.sheriffDone ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+'我要競選警長</button>');
     var confirmLabel = sel==null ? '請先選擇' : (sel===0 ? '確定棄票' : (sel===-1 ? '確定競選警長' : '確定投給 '+sel+' 號'));
     var hint = kind==='pk' ? '第二階段警長投票：只能投 '+cands.join('、')+' 號或棄票。'
       : (kind==='sheriff' ? (cands.length ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。' : '上警的人都退水了，只能棄票。')
-      : (d.sheriffDone ? '' : '要競選警長請選「我要競選警長」，這輪就會變成警長投票，上警的人不能投票。'));
+      : (d.sheriffDone ? '' : '要有人上警才可以開始投票。要競選警長請選「我要競選警長」，上警的人不能投票。'));
     html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
       + '<div class="vote-pick">'+btns+'</div>'
       + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'+confirmLabel+'</button>'
@@ -2049,6 +2051,8 @@ function handleAction(act, el){
         var kind=pureKindOf(d), cands=pureCandidatesOf(d);
         if(target===-1){
           if(kind==='pk' || d.sheriffDone) return false;
+        } else if(kind==='normal' && !d.sheriffDone){
+          return false;   // 還沒有人上警，不能投票
         } else if(target>0 && kind!=='normal' && cands.indexOf(target)<0){
           return false;
         }
