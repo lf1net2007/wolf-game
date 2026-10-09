@@ -459,11 +459,11 @@ function choiceCard(ic,title,desc,mode){
 /* ============ 投票模式 ============
    沒有計票員：每台裝置點進來先自己選號碼（1–12，不能重複）或選「旁觀」。
    入座就能投票，不用等 12 人到齊；每人選好對象按「確定」後就鎖定。
-   「該投票的人」＝已入座且沒出局的座位，這些人都投完（或有人按提前公布）之前
+   「該投票的人」＝已入座且沒出局的座位，這些人都投完之前
    不顯示任何人投給誰，公布時才在面板上顯示「幾號 → 幾號」。
    出局只能由座位本人的裝置自己標記，別人改不到。
    資料：pureSeats/{1..12} = {seatNumber, occupied, deviceId, dead}；
-         pure/state = {round, choices:{座位: 目標座位，0 棄票，-1 沒有投票權}, revealed}。 */
+         pure/state = {round, choices:{座位: 目標座位，0 棄票，-1 沒有投票權}}。 */
 var PURE_SEATS = 12;
 function pureSeatNums(){ return rangeArr(1,PURE_SEATS); }
 function pureSeatTaken(n){ var s=state.pureSeats[String(n)]; return !!(s&&s.occupied); }
@@ -472,7 +472,6 @@ function pureRound(){ return (state.pure&&state.pure.round)||1; }
 function pureChoices(){ return (state.pure&&state.pure.choices)||{}; }
 function pureVoters(){ return pureSeatNums().filter(function(n){ return pureSeatTaken(n) && !pureSeatDead(n); }); }
 function pureRoundDone(){
-  if(state.pure&&state.pure.revealed) return true;
   var c=pureChoices(), v=pureVoters();
   return v.length>0 && v.every(function(n){ return c[String(n)]!=null; });
 }
@@ -526,10 +525,8 @@ function renderPureBoard(){
     + '<div class="seat-grid">'+cells+'</div></div>';
 
   if(done){
-    var notVoted = voters.filter(function(n){return choices[String(n)]==null;});
     html += '<div class="card stack"><h2>投票結果</h2>'
       + renderVoteBreakdown({choices:choices, open:false})
-      + (notVoted.length ? '<div class="vote-breakdown-row pending"><span class="small muted">提前公布，未投票：'+notVoted.join('、')+' 號</span></div>' : '')
       + '<button class="btn btn-primary btn-block" data-act="pure-next-round" data-round="'+pureRound()+'" data-confirm="確定要清除這一輪的結果，開始第 '+(pureRound()+1)+' 輪投票嗎？">開始下一輪投票</button>'
       + '</div>';
   } else if(!voters.length){
@@ -558,10 +555,6 @@ function renderPureBoard(){
       + '<p class="small muted">尚未投票：'+pending.join('、')+' 號</p>'
       + '</div>';
   }
-  if(!done && votedN>0){
-    html += '<button class="btn btn-ghost btn-block" data-act="pure-reveal" data-round="'+pureRound()+'" data-confirm="還有人沒投票，確定要提前公布結果嗎？公布後這一輪就不能再投票。">提前公布結果</button>';
-  }
-
   html += '<div class="row">';
   if(me!=null){
     html += pureSeatDead(me)
@@ -1942,7 +1935,7 @@ function handleAction(act, el){
     db.runTransaction(function(tx){
       return tx.get(ref).then(function(snap){
         var d=snap.exists?snap.data():{};
-        if((d.round||1)!==round || d.revealed) return false;
+        if((d.round||1)!==round) return false;
         var ch=Object.assign({}, d.choices||{});
         if(ch[String(me)]!=null) return false;
         ch[String(me)]=target;
@@ -1950,18 +1943,6 @@ function handleAction(act, el){
         return true;
       });
     }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過或已進入下一輪），請看畫面上的最新狀態。'); });
-    return;
-  }
-  if(act==='pure-reveal'){
-    var round=Number(el.getAttribute('data-round'));
-    var ref=db.doc('pure/state');
-    db.runTransaction(function(tx){
-      return tx.get(ref).then(function(snap){
-        var d=snap.exists?snap.data():{};
-        if((d.round||1)!==round) return;
-        tx.set(ref,{round:round, choices:d.choices||{}, revealed:true});
-      });
-    });
     return;
   }
   if(act==='pure-dead'){
