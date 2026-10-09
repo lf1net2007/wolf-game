@@ -379,7 +379,7 @@ boot();
    GitHub Pages 讓瀏覽器把頁面暫存 10 分鐘，玩家常常拿到舊版。這裡每分鐘（和切回這個分頁時）
    繞過暫存抓一次最新的頁面，APP_BUILD 不一樣就自動重新整理。
    ※ 每次修改後要記得把 APP_BUILD 改成新的值，不然不會觸發更新。 */
-var APP_BUILD = '2026-10-10-3';
+var APP_BUILD = '2026-10-10-4';
 function checkForUpdate(){
   if(document.activeElement && document.activeElement.tagName==='INPUT') return;   // 正在打字就先不要刷新
   fetch(location.pathname+'?_='+Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
@@ -516,6 +516,7 @@ function choiceCard(ic,title,desc,mode){
    警長投票：任何一輪只要有人選「我要競選警長」（choices 值 -1），這一輪就變成警長投票——
    上警的人沒有投票權，其他人只能投給上警的人或棄票（實際上大家確認好誰上警後才會開始投，所以不處理晚上警的情況）。
    上警的人可以「退水」（choices 值 -2）：放棄競選、不能被投、也沒有投票權，投給他的票會清掉重投。
+   有人按「上警結束」（要密碼）後 candClosed=true，這一輪其他人就不能再上警（退水還可以）。
    警長投票結束（選出警長或警徽流失）後 sheriffDone=true，之後「我要競選警長」不再出現，直到重置房間。
    警長投票平票就進入「第二階段警長投票」（pk），平票的人不能投，其他人只能投平票的人或棄票。
    一般投票：得票最高（不平票）的人在開下一輪時自動標記出局，平票則沒有人出局。
@@ -653,8 +654,16 @@ function renderPureSeatPopup(n){
   html += '</div>';
   return html;
 }
+function renderPureCandClosePrompt(){
+  return '<div class="card stack" style="border-color:var(--accent-wolf);"><h2>上警結束</h2>'
+    + '<p>確認後其他玩家就不能再按「我要競選警長」，已上警的人還是可以退水。</p>'
+    + '<div class="field"><label>請輸入密碼</label><input type="password" inputmode="numeric" id="pureCandPwd" autocomplete="off"></div>'
+    + '<button class="btn btn-wolf btn-block" data-act="pure-cand-close">確認上警結束</button>'
+    + '<button class="btn btn-ghost btn-block" data-act="pure-cand-close-cancel">取消</button></div>';
+}
 function renderPureBoard(){
   if(ui.pureResetOpen) return renderPureResetPrompt();
+  if(ui.pureCandCloseOpen) return renderPureCandClosePrompt();
   if(ui.pureSeatOpen!=null) return renderPureSeatPopup(ui.pureSeatOpen);
   var me = myPureSeat();
   var d = pureState();
@@ -716,10 +725,10 @@ function renderPureBoard(){
       return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'"'+(ok?'':' disabled')+'>'+n+'</button>';
     }).join('')
       + '<button class="btn wide'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0"'+(waitCand?' disabled':'')+'>棄票</button>'
-      + (pureIsPk(kind) || d.sheriffDone ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+'我要競選警長</button>');
+      + (pureIsPk(kind) || d.sheriffDone || d.candClosed ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+'我要競選警長</button>');
     var confirmLabel = sel==null ? '請先選擇' : (sel===0 ? '確定棄票' : (sel===-1 ? '確定競選警長' : '確定投給 '+sel+' 號'));
     var hint = pureIsPk(kind) ? pureTitleOf(d)+'：只能投 '+cands.join('、')+' 號或棄票。'
-      : (kind==='sheriff' ? (cands.length ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。' : '上警的人都退水了，只能棄票。')
+      : (kind==='sheriff' ? (cands.length ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。' : '上警的人都退水了，只能棄票。')+(d.candClosed?'（上警已結束）':'')
       : (d.sheriffDone ? '' : '要有人上警才可以開始投票。要競選警長請選「我要競選警長」，上警的人不能投票。'));
     html += '<div class="card stack vote-card">'+voteHead+'<h2>你是 '+me+' 號，請選擇要投的對象</h2>'
       + '<div class="vote-pick">'+btns+'</div>'
@@ -735,6 +744,12 @@ function renderPureBoard(){
       + '<p class="small muted">尚未投票：'+pendingVoters.join('、')+' 號</p>'
       + (kind==='sheriff' && mine!=null && mine>=0 ? '<p class="small muted">如果你投的人退水了，你的票會被清掉，請重新投票。</p>' : '')
       + '</div>';
+  }
+
+  if(kind==='sheriff' && !done){
+    html += d.candClosed
+      ? '<p class="small muted" style="text-align:center;">🔒 上警已結束，候選人：'+(cands.length?cands.join('、')+' 號':'（無）')+'</p>'
+      : '<button class="btn btn-block" data-act="pure-cand-close-open">🔒 上警結束（需要密碼）</button>';
   }
 
   html += renderPureHistory();
@@ -2141,7 +2156,7 @@ function handleAction(act, el){
         if(ch[String(me)]!=null) return false;
         var kind=pureKindOf(d), cands=pureCandidatesOf(d);
         if(target===-1){
-          if(pureIsPk(kind) || d.sheriffDone) return false;
+          if(pureIsPk(kind) || d.sheriffDone || d.candClosed) return false;
         } else if(kind==='normal' && !d.sheriffDone){
           return false;   // 還沒有人上警，不能投票
         } else if(target>0 && kind!=='normal' && cands.indexOf(target)<0){
@@ -2221,6 +2236,23 @@ function handleAction(act, el){
     if(pwd!==PURE_RESET_PASSWORD){ alert('密碼錯誤，沒有變更。'); return; }
     db.collection('pureSeats').doc(String(n)).update({dead: el.getAttribute('data-v')==='1'});
     ui.pureSeatOpen=null; render();
+    return;
+  }
+  if(act==='pure-cand-close-open'){ ui.pureCandCloseOpen=true; render(); window.scrollTo(0,0); var f=$app.querySelector('#pureCandPwd'); if(f) f.focus(); return; }
+  if(act==='pure-cand-close-cancel'){ ui.pureCandCloseOpen=false; render(); return; }
+  if(act==='pure-cand-close'){
+    var pwd=(($app.querySelector('#pureCandPwd')||{}).value||'').trim();
+    if(pwd!==PURE_RESET_PASSWORD){ alert('密碼錯誤，上警沒有結束。'); return; }
+    ui.pureCandCloseOpen=false;
+    var round=pureRound(), ref=db.doc('pure/state');
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(snap){
+        var d=snap.exists?snap.data():{};
+        if((d.round||1)!==round) return;
+        tx.set(ref, Object.assign({}, d, {candClosed:true}));
+      });
+    });
+    render();
     return;
   }
   if(act==='pure-reset-open'){ ui.pureResetOpen=true; render(); var f=$app.querySelector('#pureResetPwd'); if(f) f.focus(); return; }
