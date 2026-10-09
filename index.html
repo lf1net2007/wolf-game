@@ -157,10 +157,10 @@
   }
   .seat.me{border-color:var(--accent-focus);box-shadow:3px 3px 0 var(--accent-focus);}
   .seat.sheriff::before{
-    content:'👑'; position:absolute; top:-9px; right:-9px; width:22px; height:22px; z-index:2;
+    content:'★'; position:absolute; top:-10px; right:-10px; width:24px; height:24px; color:#5a3d00; z-index:2;
     background:var(--accent-brass); border:2px solid var(--border); border-radius:50%;
-    display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1;
-    transform:rotate(14deg); box-shadow:2px 2px 0 var(--border);
+    display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1;
+    transform:none; box-shadow:2px 2px 0 var(--border);
   }
   .seat.taken{opacity:.4;cursor:not-allowed;box-shadow:none;}
   .seat.voted{background:var(--accent-good-soft);}
@@ -379,7 +379,7 @@ boot();
    GitHub Pages 讓瀏覽器把頁面暫存 10 分鐘，玩家常常拿到舊版。這裡每分鐘（和切回這個分頁時）
    繞過暫存抓一次最新的頁面，APP_BUILD 不一樣就自動重新整理。
    ※ 每次修改後要記得把 APP_BUILD 改成新的值，不然不會觸發更新。 */
-var APP_BUILD = '2026-10-10-4';
+var APP_BUILD = '2026-10-10-5';
 function checkForUpdate(){
   if(document.activeElement && document.activeElement.tagName==='INPUT') return;   // 正在打字就先不要刷新
   fetch(location.pathname+'?_='+Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
@@ -568,7 +568,7 @@ function pureOutcomeText(d){
     if(o.tied) return '再次平票（'+o.tied.join('、')+' 號），沒有人出局，第 '+pureDay(d)+' 天白天結束';
     return '沒有人得票，沒有人出局';
   }
-  if(o.winner!=null) return '🏅 '+o.winner+' 號當選警長';
+  if(o.winner!=null) return '★ '+o.winner+' 號當選警長';
   if(o.tied) return d.pk ? '再次平票（'+o.tied.join('、')+' 號），警徽流失' : '平票：'+o.tied.join('、')+' 號，進入第二階段警長投票';
   return '沒有人得票，警徽流失';
 }
