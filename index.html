@@ -97,6 +97,12 @@
   .vote-pick .btn{height:52px;padding:0;font-size:20px;white-space:nowrap;}
   .vote-pick .btn.wide{grid-column:span 2;font-size:17px;}
   .seat.cand{background:var(--accent-brass-soft);}
+  .seat.mark-good{border-color:var(--accent-good);box-shadow:3px 3px 0 var(--accent-good);}
+  .seat.mark-wolf{border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);}
+  .seat .mark-tag{position:absolute;top:-9px;left:-9px;z-index:2;width:24px;height:24px;border-radius:50%;border:2px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;}
+  .seat.mark-good .mark-tag{background:var(--accent-good);}
+  .seat.mark-wolf .mark-tag{background:var(--accent-wolf);}
   .outcome{font-weight:900;font-size:17px;padding:10px 12px;border:2.5px solid var(--border);border-radius:13px;background:var(--accent-brass-soft);}
   .history-item + .history-item{border-top:2px dashed var(--border);padding-top:12px;}
 
@@ -185,7 +191,7 @@
 
   .field{display:flex;flex-direction:column;gap:5px;}
   .field label{font-size:12.5px;color:var(--text-muted);font-weight:700;}
-  .field input[type=text],.field select{padding:9px 10px;border-radius:11px;border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);font-size:14px;}
+  .field input[type=text],.field input[type=password],.field select{padding:9px 10px;border-radius:11px;border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);font-size:14px;}
   .stepper-ctrl{display:flex;align-items:center;gap:10px;}
   .stepper-ctrl button{width:32px;height:32px;border-radius:10px;border:2.5px solid var(--border);background:var(--bg-sunken);color:var(--text);font-size:16px;box-shadow:2px 2px 0 var(--border);}
   .stepper-ctrl button:active{transform:translate(2px,2px);box-shadow:none;}
@@ -357,7 +363,7 @@ boot();
    GitHub Pages 讓瀏覽器把頁面暫存 10 分鐘，玩家常常拿到舊版。這裡每分鐘（和切回這個分頁時）
    繞過暫存抓一次最新的頁面，APP_BUILD 不一樣就自動重新整理。
    ※ 每次修改後要記得把 APP_BUILD 改成新的值，不然不會觸發更新。 */
-var APP_BUILD = '2026-10-10-1';
+var APP_BUILD = '2026-10-10-2';
 function checkForUpdate(){
   if(document.activeElement && document.activeElement.tagName==='INPUT') return;   // 正在打字就先不要刷新
   fetch(location.pathname+'?_='+Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
@@ -509,8 +515,9 @@ function pureRound(){ return pureState().round||1; }
 function pureChoices(){ return pureState().choices||{}; }
 function pureHistory(){ return pureState().history||[]; }
 // 以下幾個只看傳進來的 pure/state 資料，交易裡也能共用
+// 種類：sheriff 警長投票／pk 第二階段警長投票／normal 白天投票／daypk 白天投票第二階段
 function pureKindOf(d){
-  if(d.pk) return 'pk';
+  if(d.pk) return d.pk.kind==='day' ? 'daypk' : 'pk';
   var c=d.choices||{};
   return Object.keys(c).some(function(k){return c[k]===-1||c[k]===-2;}) ? 'sheriff' : 'normal';
 }
@@ -519,9 +526,13 @@ function pureCandidatesOf(d){
   var c=d.choices||{};
   return Object.keys(c).filter(function(k){return c[k]===-1;}).map(Number).sort(function(a,b){return a-b;});
 }
+function pureIsPk(kind){ return kind==='pk' || kind==='daypk'; }
+function pureDay(d){ return d.day||1; }
 function pureTitleOf(d){
   var k=pureKindOf(d);
-  return k==='pk' ? '第二階段警長投票' : (k==='sheriff' ? '警長投票' : '第 '+(d.round||1)+' 輪投票');
+  if(k==='pk') return '第二階段警長投票';
+  if(k==='sheriff' || !d.sheriffDone) return '警長投票';
+  return '第 '+pureDay(d)+' 天白天投票'+(k==='daypk'?'第二階段':'');
 }
 /* 這一輪的結果：winner 最高票（警長投票＝當選，一般投票＝出局）／tied 平票／none 沒有人得票 */
 function pureOutcome(d){
@@ -534,9 +545,10 @@ function pureOutcome(d){
 }
 function pureOutcomeText(d){
   var o=pureOutcome(d), kind=pureKindOf(d);
-  if(kind==='normal'){
+  if(kind==='normal' || kind==='daypk'){
     if(o.winner!=null) return '☠️ '+o.winner+' 號得票最高，出局';
-    if(o.tied) return '平票（'+o.tied.join('、')+' 號），沒有人出局';
+    if(o.tied && kind==='normal') return '平票：'+o.tied.join('、')+' 號，進入第 '+pureDay(d)+' 天白天投票第二階段';
+    if(o.tied) return '再次平票（'+o.tied.join('、')+' 號），沒有人出局，第 '+pureDay(d)+' 天白天結束';
     return '沒有人得票，沒有人出局';
   }
   if(o.winner!=null) return '🏅 '+o.winner+' 號當選警長';
@@ -579,7 +591,7 @@ function renderPurePicker(){
     + '</div>';
 }
 
-var PURE_RESET_PASSWORD = '1028';   // 防誤按用，不是真正的安全機制（原始碼公開看得到）
+var PURE_RESET_PASSWORD = '1028';   // 重置房間／標記出局共用的防誤按密碼，不是真正的安全機制（原始碼公開看得到）
 function renderPureResetPrompt(){
   return '<div class="card stack" style="border-color:var(--accent-wolf);"><h2>重置房間</h2>'
     + '<p>重置會清空所有人的座位、本輪投票與投票紀錄，大家都要重新選號碼。</p>'
@@ -587,8 +599,39 @@ function renderPureResetPrompt(){
     + '<button class="btn btn-wolf btn-block" data-act="pure-reset">確認重置</button>'
     + '<button class="btn btn-ghost btn-block" data-act="pure-reset-cancel">取消</button></div>';
 }
+/* 好人／狼人記號：每個玩家自己的筆記，只存在這台裝置（localStorage），不會給別人看到。
+   用 gameId 分開存，重置房間後就是新的一局、記號自動清空。 */
+function pureMarksKey(){ return 'ww_pure_marks_'+(pureState().gameId||'g0'); }
+function pureMarks(){ return LS.get(pureMarksKey(), {}) || {}; }
+function pureSetMark(n, v){
+  var m=pureMarks();
+  if(v) m[String(n)]=v; else delete m[String(n)];
+  LS.set(pureMarksKey(), m);
+}
+function renderPureSeatPopup(n){
+  var mark=pureMarks()[String(n)], taken=pureSeatTaken(n), dead=pureSeatDead(n);
+  var html='<div class="card stack"><div class="row between"><h2>'+n+' 號</h2><button class="iconbtn" data-act="pure-seat-close">← 返回</button></div>'
+    + '<p class="small muted">記號只有你自己看得到。</p>'
+    + '<div class="row">'
+    + '<button class="btn btn-block'+(mark==='good'?' btn-good':'')+'" data-act="pure-mark" data-n="'+n+'" data-v="good">標記好人</button>'
+    + '<button class="btn btn-block'+(mark==='wolf'?' btn-wolf':'')+'" data-act="pure-mark" data-n="'+n+'" data-v="wolf">標記狼人</button>'
+    + '</div>'
+    + (mark ? '<button class="btn btn-ghost btn-block" data-act="pure-mark" data-n="'+n+'" data-v="">清除記號</button>' : '')
+    + '</div>';
+  html += '<div class="card stack" style="border-color:var(--accent-wolf);"><h2>'+(dead?'取消出局':'標記已出局')+'</h2>';
+  if(!taken){
+    html += '<p class="small muted">這個號碼還沒有人入座，不需要標記出局（沒入座的號碼本來就不會被等投票）。</p>';
+  } else {
+    html += '<p class="small muted">'+(dead?'把 '+n+' 號改回存活，之後的投票會再等他投票。':'標記後所有人的畫面都會看到 '+n+' 號已出局，之後的投票不會再等他。')+'需要輸入密碼。</p>'
+      + '<div class="field"><label>請輸入密碼</label><input type="password" inputmode="numeric" id="pureDeadPwd" autocomplete="off"></div>'
+      + '<button class="btn btn-wolf btn-block" data-act="pure-mark-dead" data-n="'+n+'" data-v="'+(dead?'0':'1')+'">'+(dead?'確認取消 '+n+' 號出局':'確認標記 '+n+' 號已出局')+'</button>';
+  }
+  html += '</div>';
+  return html;
+}
 function renderPureBoard(){
   if(ui.pureResetOpen) return renderPureResetPrompt();
+  if(ui.pureSeatOpen!=null) return renderPureSeatPopup(ui.pureSeatOpen);
   var me = myPureSeat();
   var d = pureState();
   var kind = pureKindOf(d);
@@ -604,23 +647,28 @@ function renderPureBoard(){
     var isCand = cands.indexOf(n)>=0;
     var withdrawn = choices[String(n)]===-2;
     var voted = choices[String(n)]!=null;
-    var sub = !taken ? '未入座' : (dead ? '已出局' : (isCand ? (kind==='pk'?'PK':'🏅 上警') : (withdrawn ? '退水' : (done ? '已入座' : (voted?'✓ 已投':'投票中')))));
-    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(isCand&&!dead?' cand':'')+(!done&&voted&&!dead&&!isCand&&!withdrawn?' voted':'');
-    return '<div class="'+cls+'"><div class="num mono">'+n+'</div><div class="nick">'+sub+'</div></div>';
+    var sub = !taken ? '未入座' : (dead ? '已出局' : (isCand ? (pureIsPk(kind)?'PK':'🏅 上警') : (withdrawn ? '退水' : (done ? '已入座' : (voted?'✓ 已投':'投票中')))));
+    var mark = pureMarks()[String(n)];
+    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(isCand&&!dead?' cand':'')+(!done&&voted&&!dead&&!isCand&&!withdrawn?' voted':'')+(mark?' mark-'+mark:'');
+    return '<div class="'+cls+'" data-act="pure-seat-open" data-n="'+n+'">'
+      + (mark ? '<span class="mark-tag">'+(mark==='wolf'?'狼':'好')+'</span>' : '')
+      + '<div class="num mono">'+n+'</div><div class="nick">'+sub+'</div></div>';
   }).join('');
   var pendingVoters = voters.filter(function(n){return choices[String(n)]==null;});
   var badge = done ? '<span class="badge badge-wolf">已公布</span>'
     : (voters.length ? '<span class="badge badge-good">已選 '+(voters.length-pendingVoters.length)+'/'+voters.length+'</span>'
                      : '<span class="badge badge-muted">等待入座</span>');
   html += '<div class="card stack"><div class="row between"><h2>'+pureTitleOf(d)+'</h2>'+badge+'</div>'
-    + '<div class="seat-grid">'+cells+'</div></div>';
+    + '<div class="seat-grid">'+cells+'</div>'
+    + '<p class="small muted">點座位可以幫該玩家做好人／狼人記號（只有你自己看得到）。</p></div>';
 
   if(done){
     var nextLabel='開始下一輪投票', nextMsg='確定要清除這一輪的結果，開始下一輪投票嗎？';
     var outcome = '<div class="outcome">'+esc(pureOutcomeText(d))+'</div>';
     var o=pureOutcome(d);
     if(kind==='sheriff' && o.tied){ nextLabel='開始第二階段警長投票'; nextMsg='確定要開始第二階段警長投票（'+o.tied.join('、')+' 號 PK）嗎？'; }
-    else if(kind==='normal' && o.winner!=null){ nextMsg='確定要開始下一輪投票嗎？'+o.winner+' 號會自動標記為出局，這輪結果會存進「投票紀錄」。'; }
+    else if(kind==='normal' && o.tied){ nextLabel='開始第 '+pureDay(d)+' 天白天投票第二階段'; nextMsg='確定要開始第 '+pureDay(d)+' 天白天投票第二階段（'+o.tied.join('、')+' 號 PK）嗎？'; }
+    else if((kind==='normal' || kind==='daypk') && o.winner!=null){ nextMsg='確定要開始下一輪投票嗎？'+o.winner+' 號會自動標記為出局，這輪結果會存進「投票紀錄」。'; }
     else { nextMsg='確定要開始下一輪投票嗎？這輪結果會存進「投票紀錄」。'; }
     html += '<div class="card stack"><h2>投票結果</h2>' + outcome
       + renderVoteBreakdown({choices:choices, open:false})
@@ -630,7 +678,7 @@ function renderPureBoard(){
     html += '<div class="card stack"><h2>等待玩家入座</h2><p class="small muted">有人入座後就可以開始投票。</p></div>';
   } else if(me!=null && pureSeatDead(me)){
     html += '<div class="card stack"><h2>你已出局，不能投票</h2><p class="small muted">投票結果會跟其他人同時公布。</p></div>';
-  } else if(me!=null && kind==='pk' && cands.indexOf(me)>=0){
+  } else if(me!=null && pureIsPk(kind) && cands.indexOf(me)>=0){
     html += '<div class="card stack"><h2>你在第二階段 PK，這輪不能投票</h2><p class="small muted">PK：'+cands.join('、')+' 號。等其他人投完才會公布結果。</p></div>';
   } else if(me!=null && choices[String(me)]==null){
     var sel = ui.pureSel;
@@ -642,9 +690,9 @@ function renderPureBoard(){
       return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'"'+(ok?'':' disabled')+'>'+n+'</button>';
     }).join('')
       + '<button class="btn wide'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0"'+(waitCand?' disabled':'')+'>棄票</button>'
-      + (kind==='pk' || d.sheriffDone ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+'我要競選警長</button>');
+      + (pureIsPk(kind) || d.sheriffDone ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+'我要競選警長</button>');
     var confirmLabel = sel==null ? '請先選擇' : (sel===0 ? '確定棄票' : (sel===-1 ? '確定競選警長' : '確定投給 '+sel+' 號'));
-    var hint = kind==='pk' ? '第二階段警長投票：只能投 '+cands.join('、')+' 號或棄票。'
+    var hint = pureIsPk(kind) ? pureTitleOf(d)+'：只能投 '+cands.join('、')+' 號或棄票。'
       : (kind==='sheriff' ? (cands.length ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。' : '上警的人都退水了，只能棄票。')
       : (d.sheriffDone ? '' : '要有人上警才可以開始投票。要競選警長請選「我要競選警長」，上警的人不能投票。'));
     html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
@@ -2067,13 +2115,13 @@ function handleAction(act, el){
         if(ch[String(me)]!=null) return false;
         var kind=pureKindOf(d), cands=pureCandidatesOf(d);
         if(target===-1){
-          if(kind==='pk' || d.sheriffDone) return false;
+          if(pureIsPk(kind) || d.sheriffDone) return false;
         } else if(kind==='normal' && !d.sheriffDone){
           return false;   // 還沒有人上警，不能投票
         } else if(target>0 && kind!=='normal' && cands.indexOf(target)<0){
           return false;
         }
-        if(kind==='pk' && cands.indexOf(me)>=0) return false;
+        if(pureIsPk(kind) && cands.indexOf(me)>=0) return false;
         ch[String(me)]=target;
         tx.set(ref, Object.assign({}, d, {round:round, choices:ch}));
         return true;
@@ -2116,22 +2164,36 @@ function handleAction(act, el){
         d=snap.exists?snap.data():{};
         if((d.round||1)!==round) return null;
         var o=pureOutcome(d);
-        if(pureKindOf(d)==='normal' && o.winner!=null){
+        var k0=pureKindOf(d);
+        if((k0==='normal' || k0==='daypk') && d.sheriffDone && o.winner!=null){
           outSeatRef=db.collection('pureSeats').doc(String(o.winner));
           return tx.get(outSeatRef);
         }
         return {exists:false};
       }).then(function(seatSnap){
         if(!seatSnap) return;
-        var kind=pureKindOf(d), o=pureOutcome(d), history=(d.history||[]).slice(), pk=null, sheriffDone=!!d.sheriffDone;
+        var kind=pureKindOf(d), o=pureOutcome(d), history=(d.history||[]).slice(), pk=null, sheriffDone=!!d.sheriffDone, day=pureDay(d);
         history.push({title:pureTitleOf(d), round:round, choices:d.choices||{}, candidates:pureCandidatesOf(d), outcome:pureOutcomeText(d), at:nowIso()});
-        if(kind==='sheriff' && o.tied) pk={tied:o.tied};
-        else if(kind!=='normal') sheriffDone=true;   // 選出警長或警徽流失，警長環節結束
+        if(kind==='sheriff' && o.tied) pk={tied:o.tied, kind:'sheriff'};
+        else if(kind==='sheriff' || kind==='pk'){ sheriffDone=true; day=1; }   // 選出警長或警徽流失，警長環節結束，接著是第 1 天白天
+        else if(kind==='normal' && o.tied) pk={tied:o.tied, kind:'day'};      // 白天平票 → 同一天的第二階段
+        else if(kind==='normal' || kind==='daypk') day=day+1;                  // 有人出局／再次平票／沒人得票 → 這一天結束
         if(outSeatRef && seatSnap.exists){ tx.set(outSeatRef, Object.assign({}, seatSnap.data(), {dead:true})); }
-        tx.set(ref,{round:round+1, choices:{}, pk:pk, history:history, sheriffDone:sheriffDone});
+        tx.set(ref,{round:round+1, choices:{}, pk:pk, history:history, sheriffDone:sheriffDone, day:day, gameId:d.gameId||'g0'});
       });
     });
     ui.pureSel=null;
+    return;
+  }
+  if(act==='pure-seat-open'){ ui.pureSeatOpen=Number(el.getAttribute('data-n')); render(); window.scrollTo(0,0); return; }
+  if(act==='pure-seat-close'){ ui.pureSeatOpen=null; render(); return; }
+  if(act==='pure-mark'){ pureSetMark(Number(el.getAttribute('data-n')), el.getAttribute('data-v')); ui.pureSeatOpen=null; render(); return; }
+  if(act==='pure-mark-dead'){
+    var n=Number(el.getAttribute('data-n'));
+    var pwd=(($app.querySelector('#pureDeadPwd')||{}).value||'').trim();
+    if(pwd!==PURE_RESET_PASSWORD){ alert('密碼錯誤，沒有變更。'); return; }
+    db.collection('pureSeats').doc(String(n)).update({dead: el.getAttribute('data-v')==='1'});
+    ui.pureSeatOpen=null; render();
     return;
   }
   if(act==='pure-reset-open'){ ui.pureResetOpen=true; render(); var f=$app.querySelector('#pureResetPwd'); if(f) f.focus(); return; }
@@ -2141,7 +2203,7 @@ function handleAction(act, el){
     if(pwd!==PURE_RESET_PASSWORD){ alert('密碼錯誤，沒有重置。'); return; }
     ui.pureResetOpen=false;
     Object.keys(state.pureSeats).forEach(function(k){ db.collection('pureSeats').doc(k).delete(); });
-    db.doc('pure/state').set({round:1, choices:{}});
+    db.doc('pure/state').set({round:1, choices:{}, gameId:'g'+Date.now()});
     ui.pureSeat=null; LS.set('ww_seat_pure',null);
     ui.pureSpectator=false; LS.set('ww_pure_spectator',false);
     ui.pureSel=null;
