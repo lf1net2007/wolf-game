@@ -467,10 +467,12 @@ function choiceCard(ic,title,desc,mode){
    出局只能由座位本人的裝置自己標記，別人改不到。
    警長投票：任何一輪只要有人選「我要競選警長」（choices 值 -1），這一輪就變成警長投票——
    上警的人沒有投票權，其他人只能投給上警的人或棄票；有人新上警時，已投的票會清掉重投。
+   上警的人可以「退水」（choices 值 -2）：放棄競選、不能被投、也沒有投票權，投給他的票會清掉重投。
+   警長投票結束（選出警長或警徽流失）後 sheriffDone=true，之後「我要競選警長」不再出現，直到重置房間。
    警長投票平票就進入「第二階段警長投票」（pk），平票的人不能投，其他人只能投平票的人或棄票。
    警長投票（含第二階段）在開下一輪時寫進 history，玩家隨時可以展開「投票紀錄」查看。
    資料：pureSeats/{1..12} = {seatNumber, occupied, deviceId, dead}；
-         pure/state = {round, choices:{座位: 目標座位，0 棄票，-1 競選警長}, pk:{tied:[..]}|null, history:[..]}。 */
+         pure/state = {round, choices:{座位: 目標座位，0 棄票，-1 競選警長，-2 退水}, pk:{tied:[..]}|null, history:[..], sheriffDone}。 */
 var PURE_SEATS = 12;
 function pureSeatNums(){ return rangeArr(1,PURE_SEATS); }
 function pureSeatTaken(n){ var s=state.pureSeats[String(n)]; return !!(s&&s.occupied); }
@@ -483,7 +485,7 @@ function pureHistory(){ return pureState().history||[]; }
 function pureKindOf(d){
   if(d.pk) return 'pk';
   var c=d.choices||{};
-  return Object.keys(c).some(function(k){return c[k]===-1;}) ? 'sheriff' : 'normal';
+  return Object.keys(c).some(function(k){return c[k]===-1||c[k]===-2;}) ? 'sheriff' : 'normal';
 }
 function pureCandidatesOf(d){
   if(d.pk) return (d.pk.tied||[]).slice();
@@ -559,9 +561,10 @@ function renderPureBoard(){
   var cells = pureSeatNums().map(function(n){
     var taken = pureSeatTaken(n), dead = pureSeatDead(n);
     var isCand = cands.indexOf(n)>=0;
+    var withdrawn = choices[String(n)]===-2;
     var voted = choices[String(n)]!=null;
-    var sub = !taken ? '未入座' : (dead ? '已出局' : (isCand ? (kind==='pk'?'PK':'🏅 上警') : (done ? '已入座' : (voted?'✓ 已投':'投票中'))));
-    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(isCand&&!dead?' cand':'')+(!done&&voted&&!dead&&!isCand?' voted':'');
+    var sub = !taken ? '未入座' : (dead ? '已出局' : (isCand ? (kind==='pk'?'PK':'🏅 上警') : (withdrawn ? '退水' : (done ? '已入座' : (voted?'✓ 已投':'投票中')))));
+    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(isCand&&!dead?' cand':'')+(!done&&voted&&!dead&&!isCand&&!withdrawn?' voted':'');
     return '<div class="'+cls+'"><div class="num mono">'+n+'</div><div class="nick">'+sub+'</div></div>';
   }).join('');
   var pendingVoters = voters.filter(function(n){return choices[String(n)]==null;});
@@ -598,11 +601,11 @@ function renderPureBoard(){
       return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'"'+(ok?'':' disabled')+'>'+n+'</button>';
     }).join('')
       + '<button class="btn wide'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0">棄票</button>'
-      + (kind==='pk' ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+(kind==='sheriff'?'我也要競選警長':'我要競選警長')+'</button>');
+      + (kind==='pk' || d.sheriffDone ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+(kind==='sheriff'?'我也要競選警長':'我要競選警長')+'</button>');
     var confirmLabel = sel==null ? '請先選擇' : (sel===0 ? '確定棄票' : (sel===-1 ? '確定競選警長' : '確定投給 '+sel+' 號'));
     var hint = kind==='pk' ? '第二階段警長投票：只能投 '+cands.join('、')+' 號或棄票。'
-      : (kind==='sheriff' ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。'
-      : '要競選警長請選「我要競選警長」，這輪就會變成警長投票，上警的人不能投票。');
+      : (kind==='sheriff' ? (cands.length ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。' : '上警的人都退水了，只能棄票。')
+      : (d.sheriffDone ? '' : '要競選警長請選「我要競選警長」，這輪就會變成警長投票，上警的人不能投票。'));
     html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
       + '<div class="vote-pick">'+btns+'</div>'
       + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'+confirmLabel+'</button>'
@@ -610,11 +613,12 @@ function renderPureBoard(){
       + '</div>';
   } else {
     var mine = me!=null ? choices[String(me)] : null;
-    var title = me==null ? '投票進行中' : (mine===0 ? '你已棄票' : (mine===-1 ? '你正在競選警長，這輪不能投票' : '你已投給 '+mine+' 號'));
+    var title = me==null ? '投票進行中' : (mine===0 ? '你已棄票' : (mine===-1 ? '你正在競選警長，這輪不能投票' : (mine===-2 ? '你已退水，這輪不能投票' : '你已投給 '+mine+' 號')));
     html += '<div class="card stack"><h2>'+title+'</h2>'
+      + (mine===-1 && kind==='sheriff' ? '<button class="btn btn-block" data-act="pure-withdraw" data-confirm="確定要退水（放棄競選警長）嗎？退水後不能再上警，這輪也沒有投票權。">退水（放棄競選）</button>' : '')
       + '<p class="muted">等所有人都投完票才會公布結果。</p>'
       + '<p class="small muted">尚未投票：'+pendingVoters.join('、')+' 號</p>'
-      + (kind==='sheriff' && mine!=null && mine!==-1 ? '<p class="small muted">如果又有人上警，已投的票會清掉，請重新投票。</p>' : '')
+      + (kind==='sheriff' && mine!=null && mine>=0 ? '<p class="small muted">如果又有人上警，或你投的人退水了，你的票會被清掉，請重新投票。</p>' : '')
       + '</div>';
   }
 
@@ -1791,22 +1795,23 @@ function renderVoteBreakdown(v){
   var groups = {};
   Object.keys(choices).forEach(function(seat){
     var target = choices[seat];
-    var key = target===-1 ? 'noright' : ((target===0 || target==null) ? 'abstain' : String(target));
+    var key = target===-1 ? 'noright' : (target===-2 ? 'withdrawn' : ((target===0 || target==null) ? 'abstain' : String(target)));
     (groups[key]=groups[key]||[]).push(Number(seat));
   });
   var keys = Object.keys(groups);
   var html = '';
   if(keys.length){
     keys.sort(function(a,b){
-      if(a==='noright') return 1;
-      if(b==='noright') return -1;
-      if(a==='abstain') return 1;
-      if(b==='abstain') return -1;
+      var tail=['abstain','noright','withdrawn'];
+      if(tail.indexOf(a)>=0 || tail.indexOf(b)>=0) return tail.indexOf(a)-tail.indexOf(b);
       return (tally[Number(b)]||0)-(tally[Number(a)]||0);
     });
     html += '<div class="stack" style="margin-top:2px;">' + keys.map(function(k){
       var voters = groups[k].slice().sort(function(a,b){return a-b;});
       var voterStr = voters.join('、')+' 號';
+      if(k==='withdrawn'){
+        return '<div class="vote-breakdown-row abstain"><span class="small muted">退水：'+voterStr+'</span></div>';
+      }
       if(k==='noright'){
         return '<div class="vote-breakdown-row abstain"><span class="small muted">競選警長：'+voterStr+'</span></div>';
       }
@@ -2021,9 +2026,9 @@ function handleAction(act, el){
         if(ch[String(me)]!=null) return false;
         var kind=pureKindOf(d), cands=pureCandidatesOf(d);
         if(target===-1){
-          if(kind==='pk') return false;
-          // 有人新上警：除了上警的人以外，已投的票全部清掉重投
-          Object.keys(ch).forEach(function(k){ if(ch[k]!==-1) delete ch[k]; });
+          if(kind==='pk' || d.sheriffDone) return false;
+          // 有人新上警：除了上警／退水的人以外，已投的票全部清掉重投
+          Object.keys(ch).forEach(function(k){ if(ch[k]>=0) delete ch[k]; });
         } else if(target>0 && kind!=='normal' && cands.indexOf(target)<0){
           return false;
         }
@@ -2033,6 +2038,25 @@ function handleAction(act, el){
         return true;
       });
     }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過、有人剛上警，或已進入下一輪），請看畫面上的最新狀態。'); });
+    return;
+  }
+  if(act==='pure-withdraw'){
+    var me=myPureSeat(); var round=pureRound();
+    if(me==null) return;
+    var ref=db.doc('pure/state');
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(snap){
+        var d=snap.exists?snap.data():{};
+        if((d.round||1)!==round || d.pk) return false;
+        var ch=Object.assign({}, d.choices||{});
+        if(ch[String(me)]!==-1) return false;
+        ch[String(me)]=-2;
+        // 投給退水者的票清掉，讓那些人重投
+        Object.keys(ch).forEach(function(k){ if(ch[k]===me) delete ch[k]; });
+        tx.set(ref, Object.assign({}, d, {choices:ch}));
+        return true;
+      });
+    });
     return;
   }
   if(act==='pure-dead'){
@@ -2048,13 +2072,14 @@ function handleAction(act, el){
       return tx.get(ref).then(function(snap){
         var d=snap.exists?snap.data():{};
         if((d.round||1)!==round) return;
-        var kind=pureKindOf(d), history=(d.history||[]).slice(), pk=null;
+        var kind=pureKindOf(d), history=(d.history||[]).slice(), pk=null, sheriffDone=!!d.sheriffDone;
         if(kind!=='normal'){
           history.push({title:pureTitleOf(d), round:round, choices:d.choices||{}, candidates:pureCandidatesOf(d), outcome:pureOutcomeText(d), at:nowIso()});
           var o=pureSheriffOutcome(d);
           if(kind==='sheriff' && o.tied) pk={tied:o.tied};
+          else sheriffDone=true;   // 選出警長或警徽流失，警長環節結束
         }
-        tx.set(ref,{round:round+1, choices:{}, pk:pk, history:history});
+        tx.set(ref,{round:round+1, choices:{}, pk:pk, history:history, sheriffDone:sheriffDone});
       });
     });
     ui.pureSel=null;
