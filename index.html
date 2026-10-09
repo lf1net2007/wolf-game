@@ -92,6 +92,9 @@
   .btn-sm{padding:6px 12px;font-size:13px;border-radius:11px;box-shadow:2px 2px 0 var(--border);}
   .btn[disabled]{opacity:.4;cursor:not-allowed;box-shadow:none;transform:none;}
   .btngrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:9px;}
+  /* 投票選項：固定 4 欄 × 3 列，每格同高；棄票獨佔最後一整列，不會撐高某一列 */
+  .vote-pick{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;}
+  .vote-pick .btn{height:52px;padding:0;font-size:20px;white-space:nowrap;}
 
   .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px;border:2px solid var(--border);transform:rotate(-2deg);}
   .badge-wolf{background:var(--accent-wolf-soft);color:var(--accent-wolf);border-color:var(--accent-wolf);}
@@ -531,9 +534,9 @@ function renderPureBoard(){
     var sel = ui.pureSel;
     var btns = pureSeatNums().map(function(n){
       return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'">'+n+'</button>';
-    }).join('') + '<button class="btn'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0">棄票</button>';
+    }).join('') + '<button class="btn'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0" style="grid-column:1/-1;">棄票</button>';
     html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
-      + '<div class="btngrid">'+btns+'</div>'
+      + '<div class="vote-pick">'+btns+'</div>'
       + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'
       + (sel==null ? '請先選擇' : '確定'+(sel===0?'棄票':'投給 '+sel+' 號')) + '</button>'
       + '<p class="small muted">按下確定後就不能更改。</p>'
