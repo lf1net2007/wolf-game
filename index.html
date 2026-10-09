@@ -97,6 +97,22 @@
   .vote-pick .btn{height:52px;padding:0;font-size:20px;white-space:nowrap;}
   .vote-pick .btn.wide{grid-column:span 2;font-size:17px;}
   .seat.cand{background:var(--accent-brass-soft);}
+  /* 座位狀態面板：扁平、小一號、沒有立體陰影，看起來是「看板」而不是按鈕 */
+  .seat-board{background:var(--bg-sunken);box-shadow:none;border-style:dashed;}
+  .seat-board h3{font-size:15px;}
+  .seat-board .seat-grid{grid-template-columns:repeat(6,1fr);gap:8px;}
+  .seat-board .seat{padding:6px 2px 5px;border-radius:12px;border-width:2px;box-shadow:none;background:var(--bg-elevated);}
+  .seat-board .seat .num{font-size:18px;}
+  .seat-board .seat .nick{font-size:10px;height:13px;margin-top:2px;}
+  .seat-board .seat.empty{background:transparent;}
+  .seat-board .seat.dead::after{font-size:11px;}
+  @media (max-width:360px){ .seat-board .seat-grid{grid-template-columns:repeat(4,1fr);} }
+  /* 投票卡片：紫色外框＋紫色標題列，跟上面的座位看板明顯不同 */
+  .vote-card{border-color:var(--accent-focus);box-shadow:5px 5px 0 var(--accent-focus);padding-top:0;overflow:hidden;}
+  .vote-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 -16px 4px;padding:10px 16px;
+    background:var(--accent-focus);color:#fff;font-weight:900;font-size:16px;}
+  .vote-head .badge{background:#fff;color:var(--accent-focus);border-color:#fff;transform:none;}
+  .vote-pick .btn{border-radius:999px;}
   .seat.mark-good{border-color:var(--accent-good);box-shadow:3px 3px 0 var(--accent-good);}
   .seat.mark-wolf{border-color:var(--accent-wolf);box-shadow:3px 3px 0 var(--accent-wolf);}
   .seat .mark-tag{position:absolute;top:-9px;left:-9px;z-index:2;width:24px;height:24px;border-radius:50%;border:2px solid var(--border);
@@ -363,7 +379,7 @@ boot();
    GitHub Pages 讓瀏覽器把頁面暫存 10 分鐘，玩家常常拿到舊版。這裡每分鐘（和切回這個分頁時）
    繞過暫存抓一次最新的頁面，APP_BUILD 不一樣就自動重新整理。
    ※ 每次修改後要記得把 APP_BUILD 改成新的值，不然不會觸發更新。 */
-var APP_BUILD = '2026-10-10-2';
+var APP_BUILD = '2026-10-10-3';
 function checkForUpdate(){
   if(document.activeElement && document.activeElement.tagName==='INPUT') return;   // 正在打字就先不要刷新
   fetch(location.pathname+'?_='+Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
@@ -555,6 +571,14 @@ function pureOutcomeText(d){
   if(o.tied) return d.pk ? '再次平票（'+o.tied.join('、')+' 號），警徽流失' : '平票：'+o.tied.join('、')+' 號，進入第二階段警長投票';
   return '沒有人得票，警徽流失';
 }
+/* 警長：警長環節結束時寫進 pure/state.sheriff；結果剛公布、還沒按下一輪時也先顯示出來 */
+function pureSheriffSeat(){
+  var d=pureState();
+  if(d.sheriff) return d.sheriff;
+  var k=pureKindOf(d);
+  if((k==='sheriff' || k==='pk') && pureRoundDone()){ var o=pureOutcome(d); if(o.winner!=null) return o.winner; }
+  return null;
+}
 function pureVoters(){
   var tied = pureState().pk ? pureState().pk.tied||[] : [];
   return pureSeatNums().filter(function(n){ return pureSeatTaken(n) && !pureSeatDead(n) && tied.indexOf(n)<0; });
@@ -639,6 +663,7 @@ function renderPureBoard(){
   var choices = pureChoices();
   var voters = pureVoters();
   var done = pureRoundDone();
+  var sheriffSeat = pureSheriffSeat();
   var html = '';
 
   // 座位面板：投票中只顯示「已投／未投」，不顯示投給誰；上警的人是公開的，直接標出來。
@@ -649,7 +674,7 @@ function renderPureBoard(){
     var voted = choices[String(n)]!=null;
     var sub = !taken ? '未入座' : (dead ? '已出局' : (isCand ? (pureIsPk(kind)?'PK':'🏅 上警') : (withdrawn ? '退水' : (done ? '已入座' : (voted?'✓ 已投':'投票中')))));
     var mark = pureMarks()[String(n)];
-    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(isCand&&!dead?' cand':'')+(!done&&voted&&!dead&&!isCand&&!withdrawn?' voted':'')+(mark?' mark-'+mark:'');
+    var cls = 'seat'+(n===sheriffSeat?' sheriff':'')+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(isCand&&!dead?' cand':'')+(!done&&voted&&!dead&&!isCand&&!withdrawn?' voted':'')+(mark?' mark-'+mark:'');
     return '<div class="'+cls+'" data-act="pure-seat-open" data-n="'+n+'">'
       + (mark ? '<span class="mark-tag">'+(mark==='wolf'?'狼':'好')+'</span>' : '')
       + '<div class="num mono">'+n+'</div><div class="nick">'+sub+'</div></div>';
@@ -658,9 +683,10 @@ function renderPureBoard(){
   var badge = done ? '<span class="badge badge-wolf">已公布</span>'
     : (voters.length ? '<span class="badge badge-good">已選 '+(voters.length-pendingVoters.length)+'/'+voters.length+'</span>'
                      : '<span class="badge badge-muted">等待入座</span>');
-  html += '<div class="card stack"><div class="row between"><h2>'+pureTitleOf(d)+'</h2>'+badge+'</div>'
-    + '<div class="seat-grid">'+cells+'</div>'
-    + '<p class="small muted">點座位可以幫該玩家做好人／狼人記號（只有你自己看得到）。</p></div>';
+  // 上方座位面板只用來看狀態、做記號，下方投票卡片才是投票——兩者外觀刻意做得不一樣，避免要投票卻點到座位
+  html += '<div class="card stack seat-board"><div class="row between"><h3>👥 座位狀態</h3><span class="small muted">點座位做記號</span></div>'
+    + '<div class="seat-grid">'+cells+'</div></div>';
+  var voteHead = '<div class="vote-head"><span>🗳️ '+pureTitleOf(d)+'</span>'+badge+'</div>';
 
   if(done){
     var nextLabel='開始下一輪投票', nextMsg='確定要清除這一輪的結果，開始下一輪投票嗎？';
@@ -670,16 +696,16 @@ function renderPureBoard(){
     else if(kind==='normal' && o.tied){ nextLabel='開始第 '+pureDay(d)+' 天白天投票第二階段'; nextMsg='確定要開始第 '+pureDay(d)+' 天白天投票第二階段（'+o.tied.join('、')+' 號 PK）嗎？'; }
     else if((kind==='normal' || kind==='daypk') && o.winner!=null){ nextMsg='確定要開始下一輪投票嗎？'+o.winner+' 號會自動標記為出局，這輪結果會存進「投票紀錄」。'; }
     else { nextMsg='確定要開始下一輪投票嗎？這輪結果會存進「投票紀錄」。'; }
-    html += '<div class="card stack"><h2>投票結果</h2>' + outcome
+    html += '<div class="card stack vote-card">'+voteHead+'<h2>投票結果</h2>' + outcome
       + renderVoteBreakdown({choices:choices, open:false})
       + '<button class="btn btn-primary btn-block" data-act="pure-next-round" data-round="'+pureRound()+'" data-confirm="'+esc(nextMsg)+'">'+nextLabel+'</button>'
       + '</div>';
   } else if(!voters.length){
-    html += '<div class="card stack"><h2>等待玩家入座</h2><p class="small muted">有人入座後就可以開始投票。</p></div>';
+    html += '<div class="card stack vote-card">'+voteHead+'<h2>等待玩家入座</h2><p class="small muted">有人入座後就可以開始投票。</p></div>';
   } else if(me!=null && pureSeatDead(me)){
-    html += '<div class="card stack"><h2>你已出局，不能投票</h2><p class="small muted">投票結果會跟其他人同時公布。</p></div>';
+    html += '<div class="card stack vote-card">'+voteHead+'<h2>你已出局，不能投票</h2><p class="small muted">投票結果會跟其他人同時公布。</p></div>';
   } else if(me!=null && pureIsPk(kind) && cands.indexOf(me)>=0){
-    html += '<div class="card stack"><h2>你在第二階段 PK，這輪不能投票</h2><p class="small muted">PK：'+cands.join('、')+' 號。等其他人投完才會公布結果。</p></div>';
+    html += '<div class="card stack vote-card">'+voteHead+'<h2>你在第二階段 PK，這輪不能投票</h2><p class="small muted">PK：'+cands.join('、')+' 號。等其他人投完才會公布結果。</p></div>';
   } else if(me!=null && choices[String(me)]==null){
     var sel = ui.pureSel;
     // 警長環節還沒結束、也還沒人上警時，只能按「我要競選警長」，要有人上警才可以開始投票
@@ -695,7 +721,7 @@ function renderPureBoard(){
     var hint = pureIsPk(kind) ? pureTitleOf(d)+'：只能投 '+cands.join('、')+' 號或棄票。'
       : (kind==='sheriff' ? (cands.length ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。' : '上警的人都退水了，只能棄票。')
       : (d.sheriffDone ? '' : '要有人上警才可以開始投票。要競選警長請選「我要競選警長」，上警的人不能投票。'));
-    html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
+    html += '<div class="card stack vote-card">'+voteHead+'<h2>你是 '+me+' 號，請選擇要投的對象</h2>'
       + '<div class="vote-pick">'+btns+'</div>'
       + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'+confirmLabel+'</button>'
       + '<p class="small muted">按下確定後就不能更改。'+hint+'</p>'
@@ -703,7 +729,7 @@ function renderPureBoard(){
   } else {
     var mine = me!=null ? choices[String(me)] : null;
     var title = me==null ? '投票進行中' : (mine===0 ? '你已棄票' : (mine===-1 ? '你正在競選警長，這輪不能投票' : (mine===-2 ? '你已退水，這輪不能投票' : '你已投給 '+mine+' 號')));
-    html += '<div class="card stack"><h2>'+title+'</h2>'
+    html += '<div class="card stack vote-card">'+voteHead+'<h2>'+title+'</h2>'
       + (mine===-1 && kind==='sheriff' ? '<button class="btn btn-block" data-act="pure-withdraw" data-confirm="確定要退水（放棄競選警長）嗎？退水後不能再上警，這輪也沒有投票權。">退水（放棄競選）</button>' : '')
       + '<p class="muted">等所有人都投完票才會公布結果。</p>'
       + '<p class="small muted">尚未投票：'+pendingVoters.join('、')+' 號</p>'
@@ -2174,12 +2200,13 @@ function handleAction(act, el){
         if(!seatSnap) return;
         var kind=pureKindOf(d), o=pureOutcome(d), history=(d.history||[]).slice(), pk=null, sheriffDone=!!d.sheriffDone, day=pureDay(d);
         history.push({title:pureTitleOf(d), round:round, choices:d.choices||{}, candidates:pureCandidatesOf(d), outcome:pureOutcomeText(d), at:nowIso()});
+        var sheriff=d.sheriff||null;
         if(kind==='sheriff' && o.tied) pk={tied:o.tied, kind:'sheriff'};
-        else if(kind==='sheriff' || kind==='pk'){ sheriffDone=true; day=1; }   // 選出警長或警徽流失，警長環節結束，接著是第 1 天白天
+        else if(kind==='sheriff' || kind==='pk'){ sheriffDone=true; day=1; if(o.winner!=null) sheriff=o.winner; }   // 選出警長或警徽流失，警長環節結束，接著是第 1 天白天
         else if(kind==='normal' && o.tied) pk={tied:o.tied, kind:'day'};      // 白天平票 → 同一天的第二階段
         else if(kind==='normal' || kind==='daypk') day=day+1;                  // 有人出局／再次平票／沒人得票 → 這一天結束
         if(outSeatRef && seatSnap.exists){ tx.set(outSeatRef, Object.assign({}, seatSnap.data(), {dead:true})); }
-        tx.set(ref,{round:round+1, choices:{}, pk:pk, history:history, sheriffDone:sheriffDone, day:day, gameId:d.gameId||'g0'});
+        tx.set(ref,{round:round+1, choices:{}, pk:pk, history:history, sheriffDone:sheriffDone, day:day, sheriff:sheriff, gameId:d.gameId||'g0'});
       });
     });
     ui.pureSel=null;
