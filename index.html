@@ -96,6 +96,9 @@
   .vote-pick{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;}
   .vote-pick .btn{height:52px;padding:0;font-size:20px;white-space:nowrap;}
   .vote-pick .btn.wide{grid-column:span 2;font-size:17px;}
+  .seat.cand{background:var(--accent-brass-soft);}
+  .outcome{font-weight:900;font-size:17px;padding:10px 12px;border:2.5px solid var(--border);border-radius:13px;background:var(--accent-brass-soft);}
+  .history-item + .history-item{border-top:2px dashed var(--border);padding-top:12px;}
 
   .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px;border:2px solid var(--border);transform:rotate(-2deg);}
   .badge-wolf{background:var(--accent-wolf-soft);color:var(--accent-wolf);border-color:var(--accent-wolf);}
@@ -462,18 +465,58 @@ function choiceCard(ic,title,desc,mode){
    「該投票的人」＝已入座且沒出局的座位，這些人都投完之前
    不顯示任何人投給誰，公布時才在面板上顯示「幾號 → 幾號」。
    出局只能由座位本人的裝置自己標記，別人改不到。
+   警長投票：任何一輪只要有人選「我要競選警長」（choices 值 -1），這一輪就變成警長投票——
+   上警的人沒有投票權，其他人只能投給上警的人或棄票；有人新上警時，已投的票會清掉重投。
+   警長投票平票就進入「第二階段警長投票」（pk），平票的人不能投，其他人只能投平票的人或棄票。
+   警長投票（含第二階段）在開下一輪時寫進 history，玩家隨時可以展開「投票紀錄」查看。
    資料：pureSeats/{1..12} = {seatNumber, occupied, deviceId, dead}；
-         pure/state = {round, choices:{座位: 目標座位，0 棄票，-1 沒有投票權}}。 */
+         pure/state = {round, choices:{座位: 目標座位，0 棄票，-1 競選警長}, pk:{tied:[..]}|null, history:[..]}。 */
 var PURE_SEATS = 12;
 function pureSeatNums(){ return rangeArr(1,PURE_SEATS); }
 function pureSeatTaken(n){ var s=state.pureSeats[String(n)]; return !!(s&&s.occupied); }
 function pureSeatDead(n){ var s=state.pureSeats[String(n)]; return !!(s&&s.occupied&&s.dead); }
-function pureRound(){ return (state.pure&&state.pure.round)||1; }
-function pureChoices(){ return (state.pure&&state.pure.choices)||{}; }
-function pureVoters(){ return pureSeatNums().filter(function(n){ return pureSeatTaken(n) && !pureSeatDead(n); }); }
+function pureState(){ return state.pure||{}; }
+function pureRound(){ return pureState().round||1; }
+function pureChoices(){ return pureState().choices||{}; }
+function pureHistory(){ return pureState().history||[]; }
+// 以下幾個只看傳進來的 pure/state 資料，交易裡也能共用
+function pureKindOf(d){
+  if(d.pk) return 'pk';
+  var c=d.choices||{};
+  return Object.keys(c).some(function(k){return c[k]===-1;}) ? 'sheriff' : 'normal';
+}
+function pureCandidatesOf(d){
+  if(d.pk) return (d.pk.tied||[]).slice();
+  var c=d.choices||{};
+  return Object.keys(c).filter(function(k){return c[k]===-1;}).map(Number).sort(function(a,b){return a-b;});
+}
+function pureTitleOf(d){
+  var k=pureKindOf(d);
+  return k==='pk' ? '第二階段警長投票' : (k==='sheriff' ? '警長投票' : '第 '+(d.round||1)+' 輪投票');
+}
+/* 警長投票的結果：winner 當選／tied 平票／none 沒有人得票 */
+function pureSheriffOutcome(d){
+  var cands=pureCandidatesOf(d), c=d.choices||{}, t={};
+  Object.keys(c).forEach(function(k){ var v=c[k]; if(v>0 && cands.indexOf(v)>=0) t[v]=(t[v]||0)+1; });
+  var max=0; Object.keys(t).forEach(function(k){ if(t[k]>max) max=t[k]; });
+  if(max===0) return cands.length===1 && !d.pk ? {winner:cands[0]} : {none:true};
+  var tops=Object.keys(t).filter(function(k){return t[k]===max;}).map(Number).sort(function(a,b){return a-b;});
+  return tops.length===1 ? {winner:tops[0]} : {tied:tops};
+}
+function pureOutcomeText(d){
+  var o=pureSheriffOutcome(d);
+  if(o.winner!=null) return '🏅 '+o.winner+' 號當選警長';
+  if(o.tied) return d.pk ? '再次平票（'+o.tied.join('、')+' 號），警徽流失' : '平票：'+o.tied.join('、')+' 號，進入第二階段警長投票';
+  return '沒有人得票，警徽流失';
+}
+function pureVoters(){
+  var tied = pureState().pk ? pureState().pk.tied||[] : [];
+  return pureSeatNums().filter(function(n){ return pureSeatTaken(n) && !pureSeatDead(n) && tied.indexOf(n)<0; });
+}
 function pureRoundDone(){
   var c=pureChoices(), v=pureVoters();
-  return v.length>0 && v.every(function(n){ return c[String(n)]!=null; });
+  if(!v.length) return !!pureState().pk && pureSeatNums().some(pureSeatTaken);
+  return v.every(function(n){ return c[String(n)]!=null; });
 }
 /* 這台裝置目前登錄的座位：座位文件要存在、而且是這台裝置搶到的才算，
    否則（例如有人按了重置房間）就視為沒有座位。 */
@@ -504,57 +547,79 @@ function renderPurePicker(){
 
 function renderPureBoard(){
   var me = myPureSeat();
+  var d = pureState();
+  var kind = pureKindOf(d);
+  var cands = pureCandidatesOf(d);
   var choices = pureChoices();
   var voters = pureVoters();
   var done = pureRoundDone();
   var html = '';
 
-  // 座位面板：投票中只顯示「已投／未投」，不顯示投給誰。
+  // 座位面板：投票中只顯示「已投／未投」，不顯示投給誰；上警的人是公開的，直接標出來。
   var cells = pureSeatNums().map(function(n){
     var taken = pureSeatTaken(n), dead = pureSeatDead(n);
+    var isCand = cands.indexOf(n)>=0;
     var voted = choices[String(n)]!=null;
-    var sub = !taken ? '未入座' : (dead ? '已出局' : (done ? '已入座' : (voted?'✓ 已投':'投票中')));
-    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(!done&&voted&&!dead?' voted':'');
+    var sub = !taken ? '未入座' : (dead ? '已出局' : (isCand ? (kind==='pk'?'PK':'🏅 上警') : (done ? '已入座' : (voted?'✓ 已投':'投票中'))));
+    var cls = 'seat'+(!taken?' empty':'')+(dead?' dead':'')+(n===me?' me':'')+(isCand&&!dead?' cand':'')+(!done&&voted&&!dead&&!isCand?' voted':'');
     return '<div class="'+cls+'"><div class="num mono">'+n+'</div><div class="nick">'+sub+'</div></div>';
   }).join('');
-  var votedN = voters.filter(function(n){return choices[String(n)]!=null;}).length;
+  var pendingVoters = voters.filter(function(n){return choices[String(n)]==null;});
   var badge = done ? '<span class="badge badge-wolf">已公布</span>'
-    : (voters.length ? '<span class="badge badge-good">已投 '+votedN+'/'+voters.length+'</span>'
+    : (voters.length ? '<span class="badge badge-good">已選 '+(voters.length-pendingVoters.length)+'/'+voters.length+'</span>'
                      : '<span class="badge badge-muted">等待入座</span>');
-  html += '<div class="card stack"><div class="row between"><h2>第 '+pureRound()+' 輪投票</h2>'+badge+'</div>'
+  html += '<div class="card stack"><div class="row between"><h2>'+pureTitleOf(d)+'</h2>'+badge+'</div>'
     + '<div class="seat-grid">'+cells+'</div></div>';
 
   if(done){
-    html += '<div class="card stack"><h2>投票結果</h2>'
+    var nextLabel='開始下一輪投票', nextMsg='確定要清除這一輪的結果，開始下一輪投票嗎？';
+    var outcome='';
+    if(kind!=='normal'){
+      outcome = '<div class="outcome">'+esc(pureOutcomeText(d))+'</div>';
+      var o=pureSheriffOutcome(d);
+      if(kind==='sheriff' && o.tied){ nextLabel='開始第二階段警長投票'; nextMsg='確定要開始第二階段警長投票（'+o.tied.join('、')+' 號 PK）嗎？'; }
+      else { nextMsg='確定要開始下一輪投票嗎？這次警長投票的結果會存進「投票紀錄」。'; }
+    }
+    html += '<div class="card stack"><h2>投票結果</h2>' + outcome
       + renderVoteBreakdown({choices:choices, open:false})
-      + '<button class="btn btn-primary btn-block" data-act="pure-next-round" data-round="'+pureRound()+'" data-confirm="確定要清除這一輪的結果，開始第 '+(pureRound()+1)+' 輪投票嗎？">開始下一輪投票</button>'
+      + '<button class="btn btn-primary btn-block" data-act="pure-next-round" data-round="'+pureRound()+'" data-confirm="'+esc(nextMsg)+'">'+nextLabel+'</button>'
       + '</div>';
   } else if(!voters.length){
     html += '<div class="card stack"><h2>等待玩家入座</h2><p class="small muted">有人入座後就可以開始投票。</p></div>';
   } else if(me!=null && pureSeatDead(me)){
     html += '<div class="card stack"><h2>你已出局，不能投票</h2><p class="small muted">投票結果會跟其他人同時公布。</p></div>';
+  } else if(me!=null && kind==='pk' && cands.indexOf(me)>=0){
+    html += '<div class="card stack"><h2>你在第二階段 PK，這輪不能投票</h2><p class="small muted">PK：'+cands.join('、')+' 號。等其他人投完才會公布結果。</p></div>';
   } else if(me!=null && choices[String(me)]==null){
     var sel = ui.pureSel;
+    var allowed = kind==='normal' ? pureSeatNums() : cands;
     var btns = pureSeatNums().map(function(n){
-      return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'">'+n+'</button>';
+      var ok = allowed.indexOf(n)>=0;
+      return '<button class="btn'+(sel===n?' btn-wolf':'')+'" data-act="pure-select" data-target="'+n+'"'+(ok?'':' disabled')+'>'+n+'</button>';
     }).join('')
       + '<button class="btn wide'+(sel===0?' btn-wolf':'')+'" data-act="pure-select" data-target="0">棄票</button>'
-      + '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">沒有投票權</button>';
-    var confirmLabel = sel==null ? '請先選擇' : (sel===0 ? '確定棄票' : (sel===-1 ? '確定這輪沒有投票權' : '確定投給 '+sel+' 號'));
+      + (kind==='pk' ? '' : '<button class="btn wide'+(sel===-1?' btn-wolf':'')+'" data-act="pure-select" data-target="-1">'+(kind==='sheriff'?'我也要競選警長':'我要競選警長')+'</button>');
+    var confirmLabel = sel==null ? '請先選擇' : (sel===0 ? '確定棄票' : (sel===-1 ? '確定競選警長' : '確定投給 '+sel+' 號'));
+    var hint = kind==='pk' ? '第二階段警長投票：只能投 '+cands.join('、')+' 號或棄票。'
+      : (kind==='sheriff' ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。'
+      : '要競選警長請選「我要競選警長」，這輪就會變成警長投票，上警的人不能投票。');
     html += '<div class="card stack"><h2>你是 '+me+' 號，請選擇要投的對象</h2>'
       + '<div class="vote-pick">'+btns+'</div>'
       + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'+confirmLabel+'</button>'
-      + '<p class="small muted">按下確定後就不能更改。上警等這輪不能投票的情況，請選「沒有投票權」。</p>'
+      + '<p class="small muted">按下確定後就不能更改。'+hint+'</p>'
       + '</div>';
   } else {
     var mine = me!=null ? choices[String(me)] : null;
-    var pending = voters.filter(function(n){return choices[String(n)]==null;});
-    var title = me==null ? '投票進行中' : (mine===0 ? '你已棄票' : (mine===-1 ? '你這輪沒有投票權' : '你已投給 '+mine+' 號'));
+    var title = me==null ? '投票進行中' : (mine===0 ? '你已棄票' : (mine===-1 ? '你正在競選警長，這輪不能投票' : '你已投給 '+mine+' 號'));
     html += '<div class="card stack"><h2>'+title+'</h2>'
       + '<p class="muted">等所有人都投完票才會公布結果。</p>'
-      + '<p class="small muted">尚未投票：'+pending.join('、')+' 號</p>'
+      + '<p class="small muted">尚未投票：'+pendingVoters.join('、')+' 號</p>'
+      + (kind==='sheriff' && mine!=null && mine!==-1 ? '<p class="small muted">如果又有人上警，已投的票會清掉，請重新投票。</p>' : '')
       + '</div>';
   }
+
+  html += renderPureHistory();
+
   html += '<div class="row">';
   if(me!=null){
     html += pureSeatDead(me)
@@ -564,9 +629,21 @@ function renderPureBoard(){
   } else {
     html += '<button class="btn btn-ghost btn-block" data-act="pure-leave">改選號碼入座</button>';
   }
-  html += '<button class="btn btn-ghost btn-block" data-act="pure-reset" data-confirm="重置會清空所有人的座位與本輪投票，大家都要重新選號碼。確定要重置嗎？">重置房間</button>'
+  html += '<button class="btn btn-ghost btn-block" data-act="pure-reset" data-confirm="重置會清空所有人的座位、本輪投票與投票紀錄，大家都要重新選號碼。確定要重置嗎？">重置房間</button>'
     + '</div>';
   return html;
+}
+function renderPureHistory(){
+  var h = pureHistory();
+  if(!h.length) return '';
+  return '<div class="card"><details'+(ui.pureHistoryOpen?' open':'')+' id="pureHistory"><summary>投票紀錄（'+h.length+'）</summary>'
+    + '<div class="stack" style="margin-top:12px;">'
+    + h.slice().reverse().map(function(r){
+        return '<div class="stack history-item"><h3>'+esc(r.title)+'</h3>'
+          + '<div class="outcome">'+esc(r.outcome)+'</div>'
+          + renderVoteBreakdown({choices:r.choices||{}, open:false}) + '</div>';
+      }).join('')
+    + '</div></details></div>';
 }
 function switchIdentityBtn(){ return '<button class="iconbtn" data-act="switch-identity">切換身分</button>'; }
 function backRow(target,right){
@@ -1731,7 +1808,7 @@ function renderVoteBreakdown(v){
       var voters = groups[k].slice().sort(function(a,b){return a-b;});
       var voterStr = voters.join('、')+' 號';
       if(k==='noright'){
-        return '<div class="vote-breakdown-row abstain"><span class="small muted">無投票權：'+voterStr+'</span></div>';
+        return '<div class="vote-breakdown-row abstain"><span class="small muted">競選警長：'+voterStr+'</span></div>';
       }
       if(k==='abstain'){
         return '<div class="vote-breakdown-row abstain"><span class="mono">'+voterStr+'</span><span class="arrow">→</span><span class="badge badge-muted">棄票・'+fmtWeight(tally[0]||0)+' 票</span></div>';
@@ -1875,6 +1952,10 @@ $app.addEventListener('click', function(e){
   }
   handleAction(act, el);
 });
+// 畫面每次資料更新都會整個重畫，<details> 的展開狀態要自己記住（toggle 事件不會冒泡，用 capture）
+$app.addEventListener('toggle', function(e){
+  if(e.target.id==='pureHistory'){ ui.pureHistoryOpen=e.target.open; }
+}, true);
 $app.addEventListener('change', function(e){
   var el=e.target;
   if(el.matches('select[data-act="select"]')){
@@ -1938,11 +2019,20 @@ function handleAction(act, el){
         if((d.round||1)!==round) return false;
         var ch=Object.assign({}, d.choices||{});
         if(ch[String(me)]!=null) return false;
+        var kind=pureKindOf(d), cands=pureCandidatesOf(d);
+        if(target===-1){
+          if(kind==='pk') return false;
+          // 有人新上警：除了上警的人以外，已投的票全部清掉重投
+          Object.keys(ch).forEach(function(k){ if(ch[k]!==-1) delete ch[k]; });
+        } else if(target>0 && kind!=='normal' && cands.indexOf(target)<0){
+          return false;
+        }
+        if(kind==='pk' && cands.indexOf(me)>=0) return false;
         ch[String(me)]=target;
-        tx.set(ref,{round:round, choices:ch});
+        tx.set(ref, Object.assign({}, d, {round:round, choices:ch}));
         return true;
       });
-    }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過或已進入下一輪），請看畫面上的最新狀態。'); });
+    }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過、有人剛上警，或已進入下一輪），請看畫面上的最新狀態。'); });
     return;
   }
   if(act==='pure-dead'){
@@ -1953,12 +2043,18 @@ function handleAction(act, el){
   if(act==='pure-next-round'){
     var round=Number(el.getAttribute('data-round'));
     var ref=db.doc('pure/state');
-    // 好幾個人同時按也只會進一輪
+    // 好幾個人同時按也只會進一輪；警長投票的結果在這裡寫進紀錄，平票就開第二階段
     db.runTransaction(function(tx){
       return tx.get(ref).then(function(snap){
         var d=snap.exists?snap.data():{};
         if((d.round||1)!==round) return;
-        tx.set(ref,{round:round+1, choices:{}});
+        var kind=pureKindOf(d), history=(d.history||[]).slice(), pk=null;
+        if(kind!=='normal'){
+          history.push({title:pureTitleOf(d), round:round, choices:d.choices||{}, candidates:pureCandidatesOf(d), outcome:pureOutcomeText(d), at:nowIso()});
+          var o=pureSheriffOutcome(d);
+          if(kind==='sheriff' && o.tied) pk={tied:o.tied};
+        }
+        tx.set(ref,{round:round+1, choices:{}, pk:pk, history:history});
       });
     });
     ui.pureSel=null;
