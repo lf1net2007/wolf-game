@@ -379,7 +379,7 @@ boot();
    GitHub Pages 讓瀏覽器把頁面暫存 10 分鐘，玩家常常拿到舊版。這裡每分鐘（和切回這個分頁時）
    繞過暫存抓一次最新的頁面，APP_BUILD 不一樣就自動重新整理。
    ※ 每次修改後要記得把 APP_BUILD 改成新的值，不然不會觸發更新。 */
-var APP_BUILD = '2026-10-11-1';
+var APP_BUILD = '2026-10-11-2';
 function checkForUpdate(){
   if(document.activeElement && document.activeElement.tagName==='INPUT') return;   // 正在打字就先不要刷新
   fetch(location.pathname+'?_='+Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
@@ -663,9 +663,17 @@ function renderPureCandClosePrompt(){
     + '<button class="btn btn-wolf btn-block" data-act="pure-cand-close">確認上警結束</button>'
     + '<button class="btn btn-ghost btn-block" data-act="pure-cand-close-cancel">取消</button></div>';
 }
+function renderPureNoSheriffPrompt(){
+  return '<div class="card stack" style="border-color:var(--accent-wolf);"><h2>純投票模式</h2>'
+    + '<p>確認後這局不選警長，清除目前的警長投票，直接進入第 1 天白天放逐投票。</p>'
+    + '<div class="field"><label>請輸入密碼</label><input type="password" inputmode="numeric" id="pureNoSheriffPwd" autocomplete="off"></div>'
+    + '<button class="btn btn-wolf btn-block" data-act="pure-no-sheriff">確認純投票模式</button>'
+    + '<button class="btn btn-ghost btn-block" data-act="pure-no-sheriff-cancel">取消</button></div>';
+}
 function renderPureBoard(){
   if(ui.pureResetOpen) return renderPureResetPrompt();
   if(ui.pureCandCloseOpen) return renderPureCandClosePrompt();
+  if(ui.pureNoSheriffOpen) return renderPureNoSheriffPrompt();
   if(ui.pureSeatOpen!=null) return renderPureSeatPopup(ui.pureSeatOpen);
   var me = myPureSeat();
   var d = pureState();
@@ -758,10 +766,9 @@ function renderPureBoard(){
   html += renderPureHistory();
 
   html += '<div class="row">';
+  // 警長環節中可以改成沒有警長的純投票模式（要密碼），直接進入第 1 天白天
+  if(!d.sheriffDone) html += '<button class="btn btn-ghost btn-block" data-act="pure-no-sheriff-open">🔒 純投票模式</button>';
   if(me!=null){
-    html += pureSeatDead(me)
-      ? '<button class="btn btn-ghost btn-block" data-act="pure-dead" data-v="0" data-confirm="確定要取消 '+me+' 號的出局狀態嗎？">取消出局</button>'
-      : '<button class="btn btn-ghost btn-block" data-act="pure-dead" data-v="1" data-confirm="確定 '+me+' 號已經出局了嗎？出局後之後每一輪都不會再等你投票。">我已出局</button>';
     html += '<button class="btn btn-ghost btn-block" data-act="pure-leave" data-confirm="確定要離開 '+me+' 號座位嗎？離開後這個號碼會空出來給別人選。">離開座位</button>';
   } else {
     html += '<button class="btn btn-ghost btn-block" data-act="pure-leave">改選號碼入座</button>';
@@ -2192,11 +2199,6 @@ function handleAction(act, el){
     });
     return;
   }
-  if(act==='pure-dead'){
-    var mine=myPureSeat();
-    if(mine!=null){ db.collection('pureSeats').doc(String(mine)).update({dead: el.getAttribute('data-v')==='1'}); }
-    return;
-  }
   if(act==='pure-next-round'){
     var round=Number(el.getAttribute('data-round'));
     var ref=db.doc('pure/state');
@@ -2253,6 +2255,24 @@ function handleAction(act, el){
         var d=snap.exists?snap.data():{};
         if((d.round||1)!==round) return;
         tx.set(ref, Object.assign({}, d, {candClosed:true}));
+      });
+    });
+    render();
+    return;
+  }
+  if(act==='pure-no-sheriff-open'){ ui.pureNoSheriffOpen=true; render(); window.scrollTo(0,0); var f=$app.querySelector('#pureNoSheriffPwd'); if(f) f.focus(); return; }
+  if(act==='pure-no-sheriff-cancel'){ ui.pureNoSheriffOpen=false; render(); return; }
+  if(act==='pure-no-sheriff'){
+    var pwd=(($app.querySelector('#pureNoSheriffPwd')||{}).value||'').trim();
+    if(pwd!==PURE_RESET_PASSWORD){ alert('密碼錯誤，沒有切換成純投票模式。'); return; }
+    ui.pureNoSheriffOpen=false; ui.pureSel=null;
+    var ref=db.doc('pure/state');
+    db.runTransaction(function(tx){
+      return tx.get(ref).then(function(snap){
+        var d=snap.exists?snap.data():{};
+        if(d.sheriffDone) return;
+        // 跳過警長環節：清掉這輪的上警／投票，沒有警長，從第 1 天白天開始
+        tx.set(ref,{round:(d.round||1)+1, choices:{}, pk:null, history:d.history||[], sheriffDone:true, day:1, sheriff:null, gameId:d.gameId||'g0'});
       });
     });
     render();
