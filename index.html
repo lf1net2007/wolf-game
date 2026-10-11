@@ -379,7 +379,7 @@ boot();
    GitHub Pages 讓瀏覽器把頁面暫存 10 分鐘，玩家常常拿到舊版。這裡每分鐘（和切回這個分頁時）
    繞過暫存抓一次最新的頁面，APP_BUILD 不一樣就自動重新整理。
    ※ 每次修改後要記得把 APP_BUILD 改成新的值，不然不會觸發更新。 */
-var APP_BUILD = '2026-10-10-5';
+var APP_BUILD = '2026-10-11-1';
 function checkForUpdate(){
   if(document.activeElement && document.activeElement.tagName==='INPUT') return;   // 正在打字就先不要刷新
   fetch(location.pathname+'?_='+Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
@@ -516,7 +516,8 @@ function choiceCard(ic,title,desc,mode){
    警長投票：任何一輪只要有人選「我要競選警長」（choices 值 -1），這一輪就變成警長投票——
    上警的人沒有投票權，其他人只能投給上警的人或棄票（實際上大家確認好誰上警後才會開始投，所以不處理晚上警的情況）。
    上警的人可以「退水」（choices 值 -2）：放棄競選、不能被投、也沒有投票權，投給他的票會清掉重投。
-   有人按「上警結束」（要密碼）後 candClosed=true，這一輪其他人就不能再上警（退水還可以）。
+   有人按「上警結束」（要密碼）後 candClosed=true，這一輪其他人就不能再上警（退水還可以）；
+   警長環節在上警結束前任何人都不能投票或棄票，結果也不會公布。
    警長投票結束（選出警長或警徽流失）後 sheriffDone=true，之後「我要競選警長」不再出現，直到重置房間。
    警長投票平票就進入「第二階段警長投票」（pk），平票的人不能投，其他人只能投平票的人或棄票。
    一般投票：得票最高（不平票）的人在開下一輪時自動標記出局，平票則沒有人出局。
@@ -585,7 +586,8 @@ function pureVoters(){
   return pureSeatNums().filter(function(n){ return pureSeatTaken(n) && !pureSeatDead(n) && tied.indexOf(n)<0; });
 }
 function pureRoundDone(){
-  var c=pureChoices(), v=pureVoters();
+  var c=pureChoices(), v=pureVoters(), d=pureState();
+  if(!d.pk && !d.sheriffDone && !d.candClosed) return false;   // 上警結束前不公布
   if(!v.length) return !!pureState().pk && pureSeatNums().some(pureSeatTaken);
   return v.every(function(n){ return c[String(n)]!=null; });
 }
@@ -656,7 +658,7 @@ function renderPureSeatPopup(n){
 }
 function renderPureCandClosePrompt(){
   return '<div class="card stack" style="border-color:var(--accent-wolf);"><h2>上警結束</h2>'
-    + '<p>確認後其他玩家就不能再按「我要競選警長」，已上警的人還是可以退水。</p>'
+    + '<p>確認後其他玩家就不能再按「我要競選警長」，並開始警長投票。已上警的人還是可以退水。</p>'
     + '<div class="field"><label>請輸入密碼</label><input type="password" inputmode="numeric" id="pureCandPwd" autocomplete="off"></div>'
     + '<button class="btn btn-wolf btn-block" data-act="pure-cand-close">確認上警結束</button>'
     + '<button class="btn btn-ghost btn-block" data-act="pure-cand-close-cancel">取消</button></div>';
@@ -717,8 +719,8 @@ function renderPureBoard(){
     html += '<div class="card stack vote-card">'+voteHead+'<h2>你在第二階段 PK，這輪不能投票</h2><p class="small muted">PK：'+cands.join('、')+' 號。等其他人投完才會公布結果。</p></div>';
   } else if(me!=null && choices[String(me)]==null){
     var sel = ui.pureSel;
-    // 警長環節還沒結束、也還沒人上警時，只能按「我要競選警長」，要有人上警才可以開始投票
-    var waitCand = kind==='normal' && !d.sheriffDone;
+    // 警長環節在按「上警結束」之前，只能按「我要競選警長」，上警結束後才可以開始投票
+    var waitCand = !pureIsPk(kind) && !d.sheriffDone && !d.candClosed;
     var allowed = waitCand ? [] : (kind==='normal' ? pureSeatNums().filter(function(n){return !pureSeatDead(n);}) : cands);
     var btns = pureSeatNums().map(function(n){
       var ok = allowed.indexOf(n)>=0;
@@ -730,6 +732,7 @@ function renderPureBoard(){
     var hint = pureIsPk(kind) ? pureTitleOf(d)+'：只能投 '+cands.join('、')+' 號或棄票。'
       : (kind==='sheriff' ? (cands.length ? '警長投票：只能投上警的 '+cands.join('、')+' 號或棄票。' : '上警的人都退水了，只能棄票。')+(d.candClosed?'（上警已結束）':'')
       : (d.sheriffDone ? '' : '要有人上警才可以開始投票。要競選警長請選「我要競選警長」，上警的人不能投票。'));
+    if(waitCand) hint = '按「上警結束」之後才可以開始投票。要競選警長請選「我要競選警長」，上警的人不能投票。';
     html += '<div class="card stack vote-card">'+voteHead+'<h2>你是 '+me+' 號，請選擇要投的對象</h2>'
       + '<div class="vote-pick">'+btns+'</div>'
       + '<button class="btn btn-primary btn-block" data-act="pure-confirm-vote"'+(sel==null?' disabled':'')+'>'+confirmLabel+'</button>'
@@ -2157,8 +2160,8 @@ function handleAction(act, el){
         var kind=pureKindOf(d), cands=pureCandidatesOf(d);
         if(target===-1){
           if(pureIsPk(kind) || d.sheriffDone || d.candClosed) return false;
-        } else if(kind==='normal' && !d.sheriffDone){
-          return false;   // 還沒有人上警，不能投票
+        } else if(!pureIsPk(kind) && !d.sheriffDone && !d.candClosed){
+          return false;   // 上警還沒結束，不能投票
         } else if(target>0 && kind!=='normal' && cands.indexOf(target)<0){
           return false;
         }
@@ -2167,7 +2170,7 @@ function handleAction(act, el){
         tx.set(ref, Object.assign({}, d, {round:round, choices:ch}));
         return true;
       });
-    }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過、有人剛上警，或已進入下一輪），請看畫面上的最新狀態。'); });
+    }).then(function(ok){ ui.pureSel=null; render(); if(!ok) alert('這一票沒有寫入（可能已經投過、上警還沒結束，或已進入下一輪），請看畫面上的最新狀態。'); });
     return;
   }
   if(act==='pure-withdraw'){
